@@ -20,7 +20,7 @@ COPY . .
 RUN GOOS=linux GOARCH=${TARGETARCH} go build \
       -trimpath -buildvcs=false \
       -ldflags="-s -w -buildid= -X main.version=${VERSION}" \
-      -o /out/app ./cmd/app
+      -o /out/app .
 
 # distroless/static ships CA certificates, tzdata and /etc/passwd — no shell and
 # no package manager, so an attacker who gets execution finds no tooling.
@@ -28,8 +28,7 @@ FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
 ARG VERSION=experimental
 
-# TODO change project name
-LABEL org.opencontainers.image.title="myproject" \
+LABEL org.opencontainers.image.title="robbe" \
       org.opencontainers.image.version="${VERSION}"
 
 # Numeric uid, because Kubernetes runAsNonRoot cannot verify a username.
@@ -38,8 +37,6 @@ USER 65532:65532
 # root-owned and read-only: the process cannot rewrite its own binary, and the
 # container runs fine with --read-only.
 COPY --from=build --chown=root:root --chmod=0555 /out/app /usr/local/bin/app
-
-EXPOSE 8080
 
 # Exec form: the app is PID 1 and receives SIGTERM directly.
 ENTRYPOINT ["/usr/local/bin/app"]

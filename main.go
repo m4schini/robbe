@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: TODO
 
+// Package main is the robbe entry point.
 package main
 
 import (
-	"myproject/cmd"
-	"myproject/config"
+	"github.com/m4schini/robbe/cmd"
+	"github.com/m4schini/robbe/config"
 )
 
 var version = "dev"

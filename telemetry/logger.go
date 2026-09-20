@@ -4,8 +4,9 @@ package telemetry
 
 import (
 	"fmt"
-	"myproject/config"
 	"sync"
+
+	"github.com/m4schini/robbe/config"
 
 	"go.uber.org/zap"
 )

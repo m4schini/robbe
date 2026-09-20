@@ -90,6 +90,30 @@ linters:
     - gochecknoglobals
 
   settings:
+    exhaustruct_v5:
+      # Cobra commands and go-git option structs are configured by the
+      # handful of fields a call needs; their remaining fields are documented
+      # as optional and zero-value driven.
+      ignore-patterns:
+        - '.+/cobra\.Command$'
+        - '.+/go-git/v5\..+Options$'
+      # `return T{}, err` and `var x T` are the zero-value idiom, not a
+      # forgotten field.
+      allow-empty-returns: true
+      allow-empty-declarations: true
+    gosec:
+      excludes:
+        # G301/G306: quadlet unit files and the directories holding them are
+        # world-readable by convention (0644/0755), like every other unit file.
+        - G301
+        - G306
+    mnd:
+      ignored-functions:
+        - '^os\.MkdirAll$'
+        - '^os\.Mkdir$'
+        - '^os\.WriteFile$'
+        - '^os\.OpenFile$'
+        - '^os\.Chmod$'
     ireturn:
       allow:
         - anon
@@ -97,6 +121,9 @@ linters:
         - empty
         - stdlib
         - generic
+        # go-git models auth as an interface; the concrete type depends on
+        # the configured credentials.
+        - 'transport\.AuthMethod$'
     goheader:
       # License is still TODO
       template: |-

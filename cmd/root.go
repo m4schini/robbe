@@ -4,25 +4,17 @@
 package cmd
 
 import (
-	"myproject/config"
 	"os"
 
+	"github.com/m4schini/robbe/config"
 	"github.com/spf13/cobra"
 )
 
 // rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
-	Use:   config.AppName,
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Use:          config.AppName,
+	Short:        "Keep a host's Podman Quadlet units in sync with a git repository",
+	SilenceUsage: true,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

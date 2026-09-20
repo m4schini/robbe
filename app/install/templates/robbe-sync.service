@@ -1,0 +1,9 @@
+[Unit]
+Description=Sync Podman Quadlet units from git (robbe)
+Documentation=https://github.com/m4schini/robbe
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{.Binary}} sync

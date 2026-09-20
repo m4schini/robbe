@@ -1,0 +1,10 @@
+[Unit]
+Description=Run robbe sync periodically
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec={{.Interval}}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

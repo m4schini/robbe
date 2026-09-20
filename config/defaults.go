@@ -4,6 +4,7 @@ package config
 
 import "strings"
 
-const AppName = "myproject"
+// AppName is the binary and config file name.
+const AppName = "robbe"
 
 var appNameLowercase = strings.ToLower(AppName)
