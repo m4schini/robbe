@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultInterval = 5 * time.Minute
+const defaultInterval = 10 * time.Second
 
 var installInterval time.Duration
 
