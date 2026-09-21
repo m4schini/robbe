@@ -3,8 +3,11 @@
 package cmd
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
+	"github.com/m4schini/robbe/app/sync"
 	"github.com/m4schini/robbe/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -47,5 +50,28 @@ func TestResolveRuntime(t *testing.T) {
 				t.Errorf("warning path = %v, want /home/x/.cache/robbe/lock", warnings[0].ContextMap()["path"])
 			}
 		})
+	}
+}
+
+func TestPrintHeader_RedactsPassword(t *testing.T) {
+	t.Parallel()
+
+	var cfg config.Config
+	cfg.Repo.URL = "https://user:s3cret@example.com/x.git"
+	cfg.Repo.Ref = "main"
+
+	var (
+		out bytes.Buffer
+		res sync.Result
+	)
+
+	printHeader(&out, cfg, res)
+
+	if strings.Contains(out.String(), "s3cret") {
+		t.Errorf("header leaks password:\n%s", out.String())
+	}
+
+	if !strings.Contains(out.String(), "repo    https://user:xxxxx@example.com/x.git ref=main") {
+		t.Errorf("header missing redacted url:\n%s", out.String())
 	}
 }

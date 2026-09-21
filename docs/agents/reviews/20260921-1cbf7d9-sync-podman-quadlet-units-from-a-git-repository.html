@@ -265,7 +265,7 @@
   <h2>📋 Summary</h2>
   <p>Reviewed the whole <code>feat/quadlet-gitops</code> branch against <code>main</code> plus the uncommitted XDG base-directory change (62 files, Go 1.26, systemd units, Makefile, Containerfile, pre-commit config and Markdown docs) against the deepreview Go rules and the OWASP cross-cutting rules, with gofmt, go vet, golangci-lint, trivy and govulncheck. The hexagonal layout is clean, the sync transaction ordering is sound and fails closed in the common path, and the tests are table-driven and reasonable. The branch is <strong>not mergeable as-is</strong>: the system-scope (root) timer never runs at all because <code>config.configure</code> calls <code>os.UserHomeDir()</code> in an environment without <code>$HOME</code> (reproduced with <code>env -i</code>); a moved unit file is never removed from the target (reproduced); a target path with a trailing slash lets the prune step delete the target directory and its empty ancestors (reproduced); a single-unit <code>is-active</code> call with empty output is treated as "stopped" and the unit file removed (reproduced); <code>robbe status</code> rewrites the shared clone without the sync lock; the lock lives in a directory systemd deletes on every service stop; repository symlinks are followed into host files (reproduced); a torn marker write is unrecoverable; and <code>golang.org/x/crypto</code> v0.53.0 carries two reachable SSH client DoS CVEs. On top of that, seven documented behaviours (four in <code>docs/layout.md</code>, two in <code>docs/configuration.md</code>, one in <code>AGENTS.md</code>) do not match the code; those files are outside <code>docs/agents/</code>, so a human must edit them or the code must follow the docs. Style findings are small; the missing <code>.artifact</code> quadlet type and the complete absence of timeouts are worth a follow-up.</p>
   <p class="section-note">
-    <span class="badge critical">18 critical</span>
+    <span class="badge critical">18 critical (18 fixed)</span>
     <span class="badge style">14 style</span>
     <span class="badge suggestion">25 suggestions</span>
   </p>
@@ -274,24 +274,24 @@
       <tr><th>ID</th><th>Severity</th><th>File:Line</th><th>Issue</th></tr>
     </thead>
     <tbody>
-      <tr><td class="id">C1</td><td><span class="badge critical">critical</span></td><td class="loc"><code>AGENTS.md:46</code></td><td>container-build rules contradict the repo (stale "build fails" bullet, missing ignore files, phantom port)</td></tr>
-      <tr><td class="id">C2</td><td><span class="badge critical">critical</span></td><td class="loc"><code>adapters/gogit/source.go:188</code></td><td>auth precedence differs from <code>docs/configuration.md</code></td></tr>
-      <tr><td class="id">C3</td><td><span class="badge critical">critical</span></td><td class="loc"><code>adapters/systemctl/units.go:63</code></td><td><code>is-active</code> with empty output drops the error for a single unit and reports it stopped</td></tr>
-      <tr><td class="id">C4</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/install/install.go:72</code></td><td>sub-second <code>--interval</code> renders <code>OnUnitActiveSec=0s</code></td></tr>
-      <tr><td class="id">C5</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/layout/layout.go:112</code></td><td>symlinks in the repository are followed; host files copied into the target</td></tr>
-      <tr><td class="id">C6</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/layout/layout.go:172</code></td><td>docs say hidden files are ignored; code applies them</td></tr>
-      <tr><td class="id">C7</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/marker/marker.go:61</code></td><td>non-atomic marker write; a torn file makes every later run fail</td></tr>
-      <tr><td class="id">C8</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/status/status.go:48</code></td><td><code>robbe status</code> mutates the shared clone without taking the sync lock</td></tr>
-      <tr><td class="id">C9</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:114</code></td><td>credentials embedded in <code>repo.url</code> reach the journal, stdout and error strings</td></tr>
-      <tr><td class="id">C10</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:454</code></td><td>moved/renamed unit file is never removed from the target</td></tr>
-      <tr><td class="id">C11</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:483</code></td><td>lock file lives in a directory systemd deletes on every service stop</td></tr>
-      <tr><td class="id">C12</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:613</code></td><td>unclean target path defeats the prune guard; target and ancestors deleted</td></tr>
-      <tr><td class="id">C13</td><td><span class="badge critical">critical</span></td><td class="loc"><code>config/config.go:106</code></td><td><code>os.UserHomeDir()</code> fails under the system (root) unit; every command exits 1</td></tr>
-      <tr><td class="id">C14</td><td><span class="badge critical">critical</span></td><td class="loc"><code>docs/configuration.md:33</code></td><td>docs say root ignores XDG variables; config search still honours them</td></tr>
-      <tr><td class="id">C15</td><td><span class="badge critical">critical</span></td><td class="loc"><code>docs/layout.md:50</code></td><td>docs say an empty tree removes every managed file; code refuses without <code>--allow-empty</code></td></tr>
-      <tr><td class="id">C16</td><td><span class="badge critical">critical</span></td><td class="loc"><code>docs/layout.md:61</code></td><td>docs say <code>.robbe-*</code> files are cleaned; code removes only <code>.robbe-tmp-*</code></td></tr>
-      <tr><td class="id">C17</td><td><span class="badge critical">critical</span></td><td class="loc"><code>docs/layout.md:84</code></td><td>restart table overclaims (<code>start</code> vs <code>restart</code>, "every managed unit" vs workloads only)</td></tr>
-      <tr><td class="id">C18</td><td><span class="badge critical">critical</span></td><td class="loc"><code>go.mod:44</code></td><td><code>golang.org/x/crypto</code> v0.53.0 has two reachable SSH client DoS CVEs</td></tr>
+      <tr class="fixed"><td class="id">C1</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>AGENTS.md:46</code></td><td>container-build rules contradict the repo (stale "build fails" bullet, missing ignore files, phantom port)</td></tr>
+      <tr class="fixed"><td class="id">C2</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>adapters/gogit/source.go:188</code></td><td>auth precedence differs from <code>docs/configuration.md</code></td></tr>
+      <tr class="fixed"><td class="id">C3</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>adapters/systemctl/units.go:63</code></td><td><code>is-active</code> with empty output drops the error for a single unit and reports it stopped</td></tr>
+      <tr class="fixed"><td class="id">C4</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>app/install/install.go:72</code></td><td>sub-second <code>--interval</code> renders <code>OnUnitActiveSec=0s</code></td></tr>
+      <tr class="fixed"><td class="id">C5</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>app/layout/layout.go:112</code></td><td>symlinks in the repository are followed; host files copied into the target</td></tr>
+      <tr class="fixed"><td class="id">C6</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>app/layout/layout.go:172</code></td><td>docs say hidden files are ignored; code applies them</td></tr>
+      <tr class="fixed"><td class="id">C7</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>app/marker/marker.go:61</code></td><td>non-atomic marker write; a torn file makes every later run fail</td></tr>
+      <tr class="fixed"><td class="id">C8</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>app/status/status.go:48</code></td><td><code>robbe status</code> mutates the shared clone without taking the sync lock</td></tr>
+      <tr class="fixed"><td class="id">C9</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:114</code></td><td>credentials embedded in <code>repo.url</code> reach the journal, stdout and error strings</td></tr>
+      <tr class="fixed"><td class="id">C10</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:454</code></td><td>moved/renamed unit file is never removed from the target</td></tr>
+      <tr class="fixed"><td class="id">C11</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:483</code></td><td>lock file lives in a directory systemd deletes on every service stop</td></tr>
+      <tr class="fixed"><td class="id">C12</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:613</code></td><td>unclean target path defeats the prune guard; target and ancestors deleted</td></tr>
+      <tr class="fixed"><td class="id">C13</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>config/config.go:106</code></td><td><code>os.UserHomeDir()</code> fails under the system (root) unit; every command exits 1</td></tr>
+      <tr class="fixed"><td class="id">C14</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>docs/configuration.md:33</code></td><td>docs say root ignores XDG variables; config search still honours them</td></tr>
+      <tr class="fixed"><td class="id">C15</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>docs/layout.md:50</code></td><td>docs say an empty tree removes every managed file; code refuses without <code>--allow-empty</code></td></tr>
+      <tr class="fixed"><td class="id">C16</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>docs/layout.md:61</code></td><td>docs say <code>.robbe-*</code> files are cleaned; code removes only <code>.robbe-tmp-*</code></td></tr>
+      <tr class="fixed"><td class="id">C17</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>docs/layout.md:84</code></td><td>restart table overclaims (<code>start</code> vs <code>restart</code>, "every managed unit" vs workloads only)</td></tr>
+      <tr class="fixed"><td class="id">C18</td><td><span class="badge fixed">✔ fixed</span><span class="badge critical">critical</span></td><td class="loc"><code>go.mod:44</code></td><td><code>golang.org/x/crypto</code> v0.53.0 has two reachable SSH client DoS CVEs</td></tr>
       <tr><td class="id">S1</td><td><span class="badge style">style</span></td><td class="loc"><code>.pre-commit-config.yaml:50</code></td><td>comment references a Taskfile and a pin-drift hook that do not exist</td></tr>
       <tr><td class="id">S2</td><td><span class="badge style">style</span></td><td class="loc"><code>README.md:48</code></td><td><code>[--interval 5m]</code> reads as the default; default is 10s, reference timer says 5min</td></tr>
       <tr><td class="id">S3</td><td><span class="badge style">style</span></td><td class="loc"><code>README.md:86</code></td><td>project layout omits <code>internal/</code>; <code>make lint</code> also runs <code>check-units</code></td></tr>
@@ -316,9 +316,10 @@
 
   <h3 class="file"><code>AGENTS.md</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C1</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">AGENTS.md:29,33-37,46</span>
       <span class="headline">Container-build rules contradict the repository state</span>
@@ -336,13 +337,15 @@ deploy
     <pre><code>ln -s .containerignore .dockerignore</code></pre>
     <p class="ref">📖 AGENTS.md contract (general checklist 2, 8); OWASP A03:2025 (build hygiene). Confirmed by <code>ls -la</code> and <code>git diff main -- Containerfile</code>.</p>
     <p class="also">also: <code>Containerfile:20</code> (<code>COPY . .</code> without an ignore file)</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>adapters/gogit/source.go</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C2</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">adapters/gogit/source.go:188-212</span>
       <span class="headline">Auth precedence differs from docs/configuration.md</span>
@@ -363,13 +366,15 @@ case auth.Token != "":
 }
 </code></pre>
     <p class="ref">📖 General checklist 8 (docs contract); OWASP A04:2025 (cleartext credentials). Confirmed by reading <code>source.go:188-212</code> against <code>docs/configuration.md:70-77</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>adapters/systemctl/units.go</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C3</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">adapters/systemctl/units.go:63-72</span>
       <span class="headline">is-active with empty output drops the error for a single unit</span>
@@ -392,13 +397,15 @@ if len(lines) != len(units) {
 }
 </code></pre>
     <p class="ref">📖 go/RULES.md#3 (errors never discarded); OWASP A10:2025 (fail closed). Confirmed by a reproduction test in a scratchpad copy: <code>TestActiveStates_EmptyStdoutWithError</code> failed with <code>ActiveStates() error = nil, want != nil; got = map[web.service:]</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>app/install/install.go</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C4</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">app/install/install.go:72-81</span>
       <span class="headline">Sub-second --interval renders OnUnitActiveSec=0s</span>
@@ -410,13 +417,15 @@ if len(lines) != len(units) {
 }
 </code></pre>
     <p class="ref">📖 go/RULES.md#3 (input validation). Confirmed by a reproduction in a scratchpad copy: <code>TestRender_SubSecondInterval</code> printed <code>500ms timer line: "OnUnitActiveSec=0s"</code> and <code>1500ms ... "OnUnitActiveSec=1s"</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>app/layout/layout.go</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C5</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">app/layout/layout.go:112-146</span>
       <span class="headline">Symlinks in the repository are followed; host files copied into the target</span>
@@ -430,11 +439,13 @@ if len(lines) != len(units) {
     <p>Defence in depth: also reject symlinks right after <code>wt.Clean</code> in <code>gogit.Sync</code>, and open copy sources through <code>os.OpenRoot(checkout.Dir)</code> so escaping links are refused by the OS.</p>
     <p class="ref">📖 OWASP A01:2025 (path traversal / broken access control); go/RULES.md#11 (prefer <code>os.OpenRoot</code> when access must stay confined). Confirmed by running the scratchpad reproduction: <code>lstat mode: Lrwxrwxrwx</code>, <code>ReadFile via symlink: "rocinante\n"</code>.</p>
     <p class="also">also: <code>adapters/gogit/source.go:59-67</code>, <code>app/sync/sync.go:303-307</code>, <code>app/sync/sync.go:715</code></p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C6</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">app/layout/layout.go:172</span>
       <span class="headline">Docs say hidden files are ignored; code applies them</span>
@@ -450,13 +461,15 @@ if len(lines) != len(units) {
 </code></pre>
     <p>or have a human change <code>docs/layout.md:57</code> to: "Git metadata (<code>.git/</code>, <code>.gitignore</code>, ...) and robbe housekeeping files (<code>.robbe-*</code>). Other dotfiles are applied as support files."</p>
     <p class="ref">📖 General checklist 8 (docs contract). Confirmed by reading <code>layout.go:172</code>, <code>layout_test.go:37-54</code> and <code>docs/layout.md:25,57</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>app/marker/marker.go</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C7</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">app/marker/marker.go:61</span>
       <span class="headline">Non-atomic marker write; a torn file makes every later run fail</span>
@@ -482,13 +495,15 @@ if err := tmp.Close(); err != nil {
 return os.Rename(tmp.Name(), path)
 </code></pre>
     <p class="ref">📖 go/RULES.md#3, #9; general checklist 6 (resource/state management). Confirmed by reading <code>marker.go:41-44,61</code> and <code>sync.go:116-119</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>app/status/status.go</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C8</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">app/status/status.go:48</span>
       <span class="headline">robbe status mutates the shared clone without taking the sync lock</span>
@@ -505,13 +520,15 @@ remote, err := src.RemoteHead(ctx)
 // diff current checkout vs target under the lock; no src.Sync here
 </code></pre>
     <p class="ref">📖 go/RULES.md#6 (shared state synchronisation); OWASP A10:2025 (exceptional conditions). Confirmed by reading <code>status.go:48</code>, <code>cmd/status.go:25</code>, <code>sync.go:101</code> and <code>adapters/gogit/source.go:59-67</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>app/sync/sync.go</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C9</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">app/sync/sync.go:114</span>
       <span class="headline">Credentials embedded in repo.url reach the journal, stdout and errors</span>
@@ -530,11 +547,13 @@ func redactURL(raw string) string {
 </code></pre>
     <p class="ref">📖 OWASP A09:2025 (logging of secrets); go/RULES.md#13. Confirmed by reading go-git <code>http/common.go:489</code> and the three call sites.</p>
     <p class="also">also: <code>cmd/sync.go:104</code>, <code>adapters/gogit/source.go:107</code>, <code>adapters/gogit/source.go:150</code>, <code>adapters/gogit/source.go:180</code></p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C10</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">app/sync/sync.go:454-467</span>
       <span class="headline">Moved/renamed unit file is never removed from the target</span>
@@ -553,11 +572,13 @@ for _, f := range p.Remove {
 }
 </code></pre>
     <p class="ref">📖 General checklist 3 (correctness), go/RULES.md#8 (tests). Confirmed by a reproduction in a scratchpad copy: <code>TestRun_MovedFileNotRemoved</code> — target after the second run was <code>map[a/x.container:... b/x.container:...]</code>, Stop length 0, err nil.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C11</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">app/sync/sync.go:483-507</span>
       <span class="headline">Lock file lives in a directory systemd deletes on every service stop</span>
@@ -571,11 +592,13 @@ RuntimeDirectoryPreserve=yes
     <p>or move the lock file under <code>Opts.State</code> (or <code>Opts.Cache</code>), which systemd never removes on stop; flock does not care about stale files.</p>
     <p class="ref">📖 go/RULES.md#6 (mutual exclusion); README contract. Confirmed by the systemd.exec(5) quote above and reading <code>sync.go:483-507</code> and the two unit files.</p>
     <p class="also">also: <code>app/install/templates/robbe-sync.service:13</code>, <code>deploy/systemd/robbe-sync.service:13</code></p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C12</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">app/sync/sync.go:613-635</span>
       <span class="headline">Unclean target path defeats the prune guard; target and ancestors deleted</span>
@@ -589,13 +612,15 @@ RuntimeDirectoryPreserve=yes
 </code></pre>
     <p>(or normalise <code>Opts.Target</code> once at the top of <code>Run</code>).</p>
     <p class="ref">📖 go/RULES.md#11 (path handling); OWASP A10:2025. Confirmed by a reproduction in a scratchpad copy: <code>TestRemoveFile_TrailingSlashTargetPrunesAncestors</code> — after the call both <code>tmp/parent/robbe</code> and <code>tmp/parent</code> returned <code>ErrNotExist</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>config/config.go</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C13</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">config/config.go:106</span>
       <span class="headline">os.UserHomeDir() fails under the system (root) unit; every command exits 1</span>
@@ -618,13 +643,15 @@ paths := xdg.Defaults(appNameLowercase, user, home)
 </code></pre>
     <p>Optionally also set <code>Environment=HOME=/root</code> in the template as belt and braces. Add a <code>TestInit_NoHome</code> test.</p>
     <p class="ref">📖 go/RULES.md#12 (environment coupling); OWASP A10:2025. Confirmed by a reproduction against the built binary: <code>env -i ./robbe version</code> printed <code>Error: home directory: $HOME is not defined</code> and exited 1; the same for <code>env -i ROBBE_REPO_URL=... ./robbe sync --dry-run</code> and <code>env -i HOME= ./robbe version</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>docs/configuration.md</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C14</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">docs/configuration.md:33-35</span>
       <span class="headline">Docs say root ignores XDG variables; config search still honours them</span>
@@ -639,13 +666,15 @@ paths := xdg.Defaults(appNameLowercase, user, home)
 }
 </code></pre>
     <p class="ref">📖 General checklist 8 (docs contract). Confirmed by reading <code>config.go:117,138-152</code> and <code>docs/configuration.md:33-35</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>docs/layout.md</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C15</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">docs/layout.md:50-51</span>
       <span class="headline">Docs say an empty tree removes every managed file; code refuses</span>
@@ -656,11 +685,13 @@ paths := xdg.Defaults(appNameLowercase, user, home)
 robbe then refuses to remove every managed file unless `sync --allow-empty` is given.
 </code></pre>
     <p class="ref">📖 General checklist 8 (docs contract). Confirmed by reading <code>sync.go:38-40,215-217</code> and <code>README.md:46</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C16</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">docs/layout.md:61-63</span>
       <span class="headline">Docs say .robbe-* files are cleaned; code removes only .robbe-tmp-*</span>
@@ -671,11 +702,13 @@ robbe then refuses to remove every managed file unless `sync --allow-empty` is g
 const HousekeepingPrefix = ".robbe-tmp-"
 </code></pre>
     <p class="ref">📖 General checklist 8 (docs contract). Confirmed by reading <code>plan.go:24</code>, <code>sync.go:652-672</code> and <code>docs/layout.md:61-63</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C17</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">docs/layout.md:84,87</span>
       <span class="headline">Restart table overclaims what robbe does</span>
@@ -689,13 +722,15 @@ const HousekeepingPrefix = ".robbe-tmp-"
 "(support file -&gt; restart workloads)"
 </code></pre>
     <p class="ref">📖 General checklist 8 (docs contract). Confirmed by reading <code>sync.go:408-418</code>, <code>plan.go:125,193</code>, <code>quadlet.go:34</code>.</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 
   <h3 class="file"><code>go.mod</code></h3>
 
-  <div class="finding critical">
+  <div class="finding critical fixed">
     <div class="finding-head">
       <span class="fid">C18</span>
+      <span class="badge fixed">✔ fixed</span>
       <span class="badge critical">critical</span>
       <span class="loc mono">go.mod:44</span>
       <span class="headline">golang.org/x/crypto v0.53.0 has two reachable SSH client DoS CVEs</span>
@@ -704,6 +739,7 @@ const HousekeepingPrefix = ".robbe-tmp-"
     <p><span class="label">✅ Fix:</span></p>
     <pre><code>go get golang.org/x/crypto@v0.56.0 &amp;&amp; go mod tidy</code></pre>
     <p class="ref">📖 OWASP A03:2025 (vulnerable and outdated components). Confirmed by the govulncheck output above and <code>go mod why -m golang.org/x/crypto</code> (adapters/gogit → go-git/v5/plumbing/transport/ssh → x/crypto/ssh).</p>
+    <p class="fixed-note">Fixed: 2026-09-21</p>
   </div>
 </section>
 

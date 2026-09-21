@@ -280,6 +280,49 @@ runtime: /custom/runtime
 	}
 }
 
+//nolint:paralleltest // t.Setenv forbids t.Parallel
+func TestSearchDirs(t *testing.T) {
+	xdgConfig := t.TempDir()
+	first := t.TempDir()
+	second := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgConfig)
+	t.Setenv("XDG_CONFIG_DIRS", first+":"+second)
+
+	home := t.TempDir()
+	etc := filepath.Join(systemConfigRoot, "robbe")
+
+	tests := []struct {
+		name string
+		user bool
+		want []string
+	}{
+		{
+			name: "user honours XDG_CONFIG_HOME, XDG_CONFIG_DIRS, then /etc",
+			user: true,
+			want: []string{
+				filepath.Join(xdgConfig, "robbe"),
+				filepath.Join(first, "robbe"),
+				filepath.Join(second, "robbe"),
+				etc,
+			},
+		},
+		{
+			name: "root ignores XDG variables and reads only /etc",
+			user: false,
+			want: []string{etc},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := searchDirs(tt.user, home)
+			if strings.Join(got, ":") != strings.Join(tt.want, ":") {
+				t.Errorf("searchDirs(%v) = %q, want %q", tt.user, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestInit_ConfigHomeWinsOverConfigDirs(t *testing.T) {
 	resetViper(t)
 
@@ -388,6 +431,32 @@ func TestInit_ConfigFlagMissing(t *testing.T) {
 
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("configure() error = %v, want to wrap os.ErrNotExist", err)
+	}
+}
+
+// TestConfigure_NoHome covers the system unit, which runs without $HOME
+// (systemd.exec(5) sets it only for units with User=). Root must not need it;
+// a non-root user still does.
+func TestConfigure_NoHome(t *testing.T) {
+	resetViper(t)
+	t.Setenv("HOME", "")
+
+	err := configure()
+
+	if os.Geteuid() == 0 {
+		if err != nil {
+			t.Fatalf("configure() error = %v, want nil for root without $HOME", err)
+		}
+
+		return
+	}
+
+	if err == nil {
+		t.Fatal("configure() error = nil, want error for a non-root user without $HOME")
+	}
+
+	if !strings.Contains(err.Error(), "home directory") {
+		t.Errorf("configure() error = %q, want to mention the home directory", err)
 	}
 }
 

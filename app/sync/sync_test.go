@@ -11,13 +11,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/m4schini/robbe/adapters/generator"
 	"github.com/m4schini/robbe/adapters/gogit"
 	"github.com/m4schini/robbe/adapters/systemctl"
+	"github.com/m4schini/robbe/app/lock"
 	"github.com/m4schini/robbe/app/marker"
 	"github.com/m4schini/robbe/internal/testutil"
 	"github.com/m4schini/robbe/ports"
@@ -584,6 +584,35 @@ func TestSync_StopFailureKeepsFile(t *testing.T) {
 	assertEqual(t, "marker", h.marker(t).Commit, first)
 }
 
+func TestSync_MovedFileRemoved(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.repo.Commit("init", map[string]string{"a/x.container": nginx})
+	h.run(t, false)
+	h.runner.Reset()
+
+	// Same content at a new path: the unit is neither stopped nor restarted,
+	// but the old file must still go so the target has one file per unit.
+	h.repo.Remove("move", "a/x.container")
+	commit := h.repo.Commit("move", map[string]string{"b/x.container": nginx})
+	res := h.run(t, false)
+
+	assertEqual(t, "add", res.Plan.Add[0].Rel, "b/x.container")
+	assertEqual(t, "remove", res.Plan.Remove[0].Rel, "a/x.container")
+	assertEqual(t, "stop", len(res.Plan.Stop), 0)
+
+	files := h.targetFiles(t)
+	assertEqual(t, "b/x.container", files["b/x.container"], nginx)
+
+	if _, ok := files["a/x.container"]; ok {
+		t.Error("a/x.container still in target")
+	}
+
+	assertEqual(t, "file count", len(files), 1)
+	assertEqual(t, "marker", h.marker(t).Commit, commit)
+}
+
 func TestSync_EmptyTreeGuard(t *testing.T) {
 	t.Parallel()
 
@@ -670,19 +699,11 @@ func TestSync_Locked(t *testing.T) {
 	h := newHarness(t)
 	h.repo.Commit("init", map[string]string{"nginx.container": nginx})
 
-	if err := os.MkdirAll(h.runtime, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	lock, err := os.OpenFile(filepath.Join(h.runtime, lockFileName), os.O_CREATE|os.O_RDWR, 0o644)
+	unlock, err := lock.Acquire(h.runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lock.Close()
-
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		t.Fatal(err)
-	}
+	defer unlock()
 
 	_, err = h.syncer.Run(t.Context(), false)
 	if !errors.Is(err, ErrLocked) {
@@ -702,11 +723,43 @@ func TestSync_LockDirCreated(t *testing.T) {
 
 	h.run(t, true)
 
-	if _, err := os.Stat(filepath.Join(h.runtime, lockFileName)); err != nil {
+	if _, err := os.Stat(filepath.Join(h.runtime, lock.FileName)); err != nil {
 		t.Errorf("lock file not created under the runtime dir: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(h.syncer.Opts.Cache, lockFileName)); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(h.syncer.Opts.Cache, lock.FileName)); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("lock file still created in the cache: %v", err)
+	}
+}
+
+func TestRemoveFile_TrailingSlashTarget(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	target := filepath.Join(parent, "systemd")
+	if err := os.MkdirAll(filepath.Join(target, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(target, "sub", "a.container"), []byte(nginx), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tgt := range []string{target + "/", target + "//", target + "/./"} {
+		if err := removeFile(tgt, "sub/a.container"); err != nil {
+			t.Fatalf("removeFile(%q): %v", tgt, err)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(target, "sub")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("empty sub dir not pruned: %v", err)
+	}
+
+	if _, err := os.Stat(target); err != nil {
+		t.Errorf("target dir removed: %v", err)
+	}
+
+	if _, err := os.Stat(parent); err != nil {
+		t.Errorf("target parent removed: %v", err)
 	}
 }

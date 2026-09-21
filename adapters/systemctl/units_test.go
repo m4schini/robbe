@@ -3,6 +3,7 @@
 package systemctl
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -259,5 +260,41 @@ func TestActiveStates_WrongLineCountWithError(t *testing.T) {
 	_, err := m.ActiveStates(t.Context(), "a.service", "b.service")
 	if err == nil {
 		t.Fatalf("ActiveStates() error = nil, want error")
+	}
+}
+
+func TestActiveStates_EmptyStdoutWithError(t *testing.T) {
+	t.Parallel()
+
+	runner := testutil.NewFakeRunner()
+	runner.Fail("systemctl is-active a.service", "Failed to connect to bus: No such file or directory")
+
+	m := New(runner, false)
+
+	got, err := m.ActiveStates(t.Context(), "a.service")
+	if err == nil {
+		t.Fatalf("ActiveStates() = %v, error = nil, want error", got)
+	}
+
+	if !strings.Contains(err.Error(), "Failed to connect to bus") {
+		t.Errorf("err = %q, want to contain stderr", err.Error())
+	}
+}
+
+func TestActiveStates_EmptyStdoutWithoutError(t *testing.T) {
+	t.Parallel()
+
+	runner := testutil.NewFakeRunner()
+	runner.Script("systemctl is-active a.service", testutil.Result{
+		Stdout: "",
+		Stderr: "",
+		Err:    nil,
+	})
+
+	m := New(runner, false)
+
+	got, err := m.ActiveStates(t.Context(), "a.service")
+	if !errors.Is(err, ErrUnexpectedOutput) {
+		t.Fatalf("ActiveStates() = %v, error = %v, want %v", got, err, ErrUnexpectedOutput)
 	}
 }

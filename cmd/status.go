@@ -10,6 +10,7 @@ import (
 	"github.com/m4schini/robbe/app/status"
 	"github.com/m4schini/robbe/config"
 	"github.com/m4schini/robbe/ports"
+	"github.com/m4schini/robbe/telemetry"
 	"github.com/spf13/cobra"
 )
 
@@ -24,12 +25,13 @@ var statusCmd = &cobra.Command{
 		}
 
 		st, err := status.Get(cmd.Context(), gogit.New(cfg.Cache), status.Options{
-			URL:    cfg.Repo.URL,
-			Ref:    cfg.Repo.Ref,
-			Auth:   ports.Auth(cfg.Repo.Auth),
-			Host:   cfg.Host,
-			Target: cfg.Target,
-			State:  cfg.State,
+			URL:     cfg.Repo.URL,
+			Ref:     cfg.Repo.Ref,
+			Auth:    ports.Auth(cfg.Repo.Auth),
+			Host:    cfg.Host,
+			Target:  cfg.Target,
+			State:   cfg.State,
+			Runtime: resolveRuntime(cfg, telemetry.Logger("status")),
 		})
 		if err != nil {
 			return fmt.Errorf("status: %w", err)

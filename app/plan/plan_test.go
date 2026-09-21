@@ -413,7 +413,7 @@ func TestPlan_String(t *testing.T) {
 		"  stop     db.service",
 		"  start    proxy-network.service",
 		"  restart  nginx.service",
-		"(support file -> restart all)",
+		"(support file -> restart workloads)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("String() missing %q, got:\n%s", want, out)
@@ -611,5 +611,30 @@ func TestDiff_StaleTempIgnored(t *testing.T) {
 
 	if !p.Empty() {
 		t.Errorf("Empty() = false, want true (plan = %+v)", p)
+	}
+}
+
+func TestDiff_StaleCommitMarkerRemoved(t *testing.T) {
+	t.Parallel()
+
+	srcDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	desired := writeTree(t, srcDir, map[string]string{
+		"a.container": "A",
+	})
+	writeTarget(t, targetDir, map[string]string{
+		"a.container":   "A",
+		".robbe-commit": "abc123",
+	})
+
+	p, err := Diff(desired, targetDir, nil, nil)
+	if err != nil {
+		t.Fatalf("Diff() error = %v", err)
+	}
+
+	want := []File{{Rel: ".robbe-commit", Unit: ""}}
+	if !reflect.DeepEqual(p.Remove, want) {
+		t.Errorf("Remove = %+v, want %+v", p.Remove, want)
 	}
 }

@@ -22,8 +22,8 @@ repo/
 └── web.network
 ```
 
-Every file (except hidden files and `.kube` files, see below) is written to
-the target directory with the same relative path.
+Every file (except git metadata, robbe housekeeping files and `.kube` files,
+see below) is written to the target directory with the same relative path.
 
 ### Multiple hosts
 
@@ -48,13 +48,17 @@ repo/
 - If `hosts/<hostname>/` does not exist only `common/` is applied and a
   warning is logged.
 - If neither `common/` nor `hosts/<hostname>/` exists the desired tree is
-  empty and every managed file is removed.
+  empty. robbe then refuses to remove every managed file and fails with
+  `desired tree is empty; refusing to remove every managed unit (use
+  --allow-empty)`; pass `sync --allow-empty` to remove them.
 - Files outside `common/` and `hosts/<hostname>/` (a README, other hosts) are
   never applied.
 
 ## Ignored files
 
-- Hidden files and directories (names starting with `.`), including `.git/`.
+- Git metadata (names starting with `.git`: `.git/`, `.gitignore`,
+  `.gitattributes`, ...) and robbe housekeeping files (names starting with
+  `.robbe`). Other dotfiles such as `.env` are applied as support files.
 - `*.kube` files. robbe does not manage Kubernetes YAML units; they are
   reported as skipped.
 
@@ -81,14 +85,14 @@ Each `robbe sync` diffs the desired tree against the target directory:
 
 | change                     | action                                   |
 |----------------------------|------------------------------------------|
-| unit file added            | `systemctl start <unit>`                 |
+| unit file added            | `systemctl restart <unit>` (starts it when inactive) |
 | unit file changed          | `systemctl restart <unit>`               |
 | unit file removed          | `systemctl stop <unit>`, then delete     |
-| support file added/changed/removed | `systemctl restart` of every managed unit |
+| support file added/changed/removed | `systemctl restart` of every managed `.container`/`.pod` unit |
 
-`daemon-reload` runs after the files are written and before any start or
-restart. Units are passed to systemctl in one call per action so systemd
-orders them by their dependencies.
+`daemon-reload` runs after the files are written and before any restart.
+Added and changed units are passed to systemctl in a single `restart` call
+(stops in a single `stop` call) so systemd orders them by their dependencies.
 
 Before the target is touched the staged tree is validated with
 `podman-system-generator --dryrun`; on failure nothing is written and robbe

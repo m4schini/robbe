@@ -20,8 +20,9 @@ import (
 
 // HousekeepingPrefix marks robbe's own temporary files in the target
 // (.robbe-tmp-*, from atomic writes); they are never part of the managed
-// tree. The applied-commit marker lives in the state directory, not here.
-const HousekeepingPrefix = ".robbe"
+// tree. Anything else, including a stale .robbe-commit marker from older
+// versions, is ordinary target content and is removed like any other drift.
+const HousekeepingPrefix = ".robbe-tmp-"
 
 // File is one entry of the plan. Unit is empty for support files (env
 // files, configs, drop-ins).
@@ -190,7 +191,7 @@ func writeFiles(b *strings.Builder, sign string, files []File) {
 	for _, f := range files {
 		note := ""
 		if f.Unit == "" {
-			note = "          (support file -> restart all)"
+			note = "          (support file -> restart workloads)"
 		}
 
 		fmt.Fprintf(b, "  %s %s%s\n", sign, f.Rel, note)

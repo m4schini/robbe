@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/m4schini/robbe/app/layout"
+	"github.com/m4schini/robbe/app/lock"
 	"github.com/m4schini/robbe/app/marker"
 	"github.com/m4schini/robbe/app/plan"
 	"github.com/m4schini/robbe/ports"
@@ -26,7 +26,6 @@ import (
 
 const (
 	stagingDirName = "staging"
-	lockFileName   = "lock"
 	tmpPrefix      = ".robbe-tmp-"
 	filePerm       = 0o644
 	dirPerm        = 0o755
@@ -34,7 +33,7 @@ const (
 
 var (
 	// ErrLocked is returned when another robbe run holds the cache lock.
-	ErrLocked = errors.New("another robbe run is in progress")
+	ErrLocked = lock.ErrLocked
 	// ErrEmptyTree is returned when the desired tree is empty while the
 	// target still holds managed files and AllowEmpty is not set.
 	ErrEmptyTree = errors.New("desired tree is empty; refusing to remove every managed unit (use --allow-empty)")
@@ -98,9 +97,9 @@ type Result struct {
 
 // Run performs a sync. With dryRun it stops after computing the plan.
 func (s *Syncer) Run(ctx context.Context, dryRun bool) (Result, error) {
-	unlock, err := s.lock()
+	unlock, err := lock.Acquire(s.Opts.Runtime)
 	if err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("lock: %w", err)
 	}
 	defer unlock()
 
@@ -111,7 +110,7 @@ func (s *Syncer) Run(ctx context.Context, dryRun bool) (Result, error) {
 		return Result{}, fmt.Errorf("fetch: %w", err)
 	}
 
-	log.Info("fetched", zap.String("url", s.Opts.URL), zap.String("ref", s.Opts.Ref), zap.String("commit", co.Commit))
+	log.Info("fetched", zap.String("url", ports.RedactURL(s.Opts.URL)), zap.String("ref", s.Opts.Ref), zap.String("commit", co.Commit))
 
 	applied, err := marker.Read(s.Opts.State)
 	if err != nil {
@@ -449,13 +448,20 @@ func (s *Syncer) logUnits(action string, units []string) {
 }
 
 // writeFiles removes the files of p.Remove and installs p.Add and p.Change
-// from staging. A unit file is only removed when its unit is down, so a
-// failed stop is retried on the next run.
+// from staging. A unit file whose unit the plan stops is only removed when
+// the stop succeeded, so a failed stop is retried on the next run. Files of
+// units the plan does not stop (a unit file moved to a new path, whose unit
+// stays up) are removed unconditionally.
 func (s *Syncer) writeFiles(staging string, p plan.Plan, stopped map[string]bool) error {
 	log := s.logger()
 
+	mustBeDown := make(map[string]bool, len(p.Stop))
+	for _, u := range p.Stop {
+		mustBeDown[u] = true
+	}
+
 	for _, f := range p.Remove {
-		if f.Unit != "" && !stopped[f.Unit] {
+		if f.Unit != "" && mustBeDown[f.Unit] && !stopped[f.Unit] {
 			continue
 		}
 
@@ -475,35 +481,6 @@ func (s *Syncer) writeFiles(staging string, p plan.Plan, stopped map[string]bool
 	}
 
 	return nil
-}
-
-// lock takes an exclusive flock on <runtime>/lock so a timer run and a
-// manual run cannot interleave. The runtime directory is created when
-// missing (systemd creates it for timer runs, manual runs do it here).
-func (s *Syncer) lock() (func(), error) {
-	if err := os.MkdirAll(s.Opts.Runtime, dirPerm); err != nil {
-		return nil, fmt.Errorf("create runtime dir: %w", err)
-	}
-
-	f, err := os.OpenFile(filepath.Join(s.Opts.Runtime, lockFileName), os.O_CREATE|os.O_RDWR, filePerm)
-	if err != nil {
-		return nil, fmt.Errorf("open lock: %w", err)
-	}
-
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = f.Close()
-
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, ErrLocked
-		}
-
-		return nil, fmt.Errorf("lock: %w", err)
-	}
-
-	return func() {
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		_ = f.Close()
-	}, nil
 }
 
 func (s *Syncer) logLayout(lay layout.Layout) {
@@ -611,6 +588,11 @@ func writeAndClose(dst *os.File, src string) error {
 // removeFile deletes target/rel and any parent directories left empty
 // below target. The target directory itself is kept.
 func removeFile(target, rel string) error {
+	// Clean target so the prune guard's string comparison matches the
+	// cleaned paths produced by filepath.Dir; an unclean target (trailing
+	// slash, "./x") would otherwise let the walk remove target and its
+	// ancestors.
+	target = filepath.Clean(target)
 	path := filepath.Join(target, filepath.FromSlash(rel))
 
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {

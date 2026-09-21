@@ -104,6 +104,6 @@ func warnLinger(cmd *cobra.Command, inst *install.Installer) {
 }
 
 func init() {
-	installCmd.Flags().DurationVar(&installInterval, "interval", defaultInterval, "time between sync runs")
+	installCmd.Flags().DurationVar(&installInterval, "interval", defaultInterval, "time between sync runs (whole seconds, at least 1s)")
 	rootCmd.AddCommand(installCmd, uninstallCmd)
 }

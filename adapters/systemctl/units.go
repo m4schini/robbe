@@ -62,7 +62,16 @@ func (m *Manager) ActiveStates(ctx context.Context, units ...string) (map[string
 
 	stdout, err := m.run(ctx, "is-active", units...)
 
-	lines := strings.Split(strings.TrimSpace(string(stdout)), "\n")
+	out := strings.TrimSpace(string(stdout))
+	if out == "" {
+		if err != nil {
+			return nil, err
+		}
+
+		return nil, fmt.Errorf("%w: is-active printed nothing for %d units", ErrUnexpectedOutput, len(units))
+	}
+
+	lines := strings.Split(out, "\n")
 	if len(lines) != len(units) {
 		if err != nil {
 			return nil, err

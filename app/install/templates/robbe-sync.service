@@ -11,3 +11,6 @@ ConfigurationDirectory=robbe
 CacheDirectory=robbe
 StateDirectory=robbe
 RuntimeDirectory=robbe
+# Keep the lock file's directory across stops so a manual run and the timer
+# always contend for the same inode (see app/sync lock()).
+RuntimeDirectoryPreserve=yes

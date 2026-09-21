@@ -29,6 +29,10 @@ const (
 // ErrRefNotFound is returned when ref is neither a remote branch nor a tag.
 var ErrRefNotFound = errors.New("ref not found on remote")
 
+// ErrInsecureTransport is returned when a token would be sent over a
+// transport that does not protect it, such as plain http.
+var ErrInsecureTransport = errors.New("insecure transport")
+
 // Source keeps a clone below cache and implements ports.Source.
 type Source struct {
 	cache string
@@ -104,7 +108,7 @@ func (s *Source) fetch(ctx context.Context, url, ref string, auth ports.Auth) (*
 		Tags:  git.NoTags,
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return nil, plumbing.ZeroHash, fmt.Errorf("fetch %s: %w", url, err)
+		return nil, plumbing.ZeroHash, fmt.Errorf("fetch %s: %w", ports.RedactURL(url), err)
 	}
 
 	hash, err := resolve(repo, ref)
@@ -147,7 +151,7 @@ func (s *Source) open(ctx context.Context, url string, method transport.AuthMeth
 		Tags:       git.NoTags,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("clone %s: %w", url, err)
+		return nil, fmt.Errorf("clone %s: %w", ports.RedactURL(url), err)
 	}
 
 	return repo, nil
@@ -172,12 +176,14 @@ func resolve(repo *git.Repository, ref string) (plumbing.Hash, error) {
 	return plumbing.ZeroHash, fmt.Errorf("%w: %s", ErrRefNotFound, ref)
 }
 
-// authMethod picks the go-git auth for url: an ssh key file when configured,
-// the ssh agent for ssh urls, basic auth when a token is set, else none.
+// authMethod picks the go-git auth for url in the order documented in
+// docs/configuration.md: an ssh key file when configured, the ssh agent for
+// ssh urls, basic auth when a token is set, else none. A token is never sent
+// over plain http; that returns ErrInsecureTransport.
 func authMethod(url string, auth ports.Auth) (transport.AuthMethod, error) {
 	ep, err := transport.NewEndpoint(url)
 	if err != nil {
-		return nil, fmt.Errorf("parse url %q: %w", url, err)
+		return nil, fmt.Errorf("parse url %q: %w", ports.RedactURL(url), err)
 	}
 
 	user := ep.User
@@ -193,13 +199,6 @@ func authMethod(url string, auth ports.Auth) (transport.AuthMethod, error) {
 		}
 
 		return keys, nil
-	case auth.Token != "":
-		username := auth.Username
-		if username == "" {
-			username = defaultUser
-		}
-
-		return &http.BasicAuth{Username: username, Password: auth.Token}, nil
 	case ep.Protocol == "ssh":
 		agent, err := ssh.NewSSHAgentAuth(user)
 		if err != nil {
@@ -207,7 +206,24 @@ func authMethod(url string, auth ports.Auth) (transport.AuthMethod, error) {
 		}
 
 		return agent, nil
+	case auth.Token != "":
+		return tokenAuth(ep, auth)
 	default:
 		return nil, nil //nolint:nilnil // no auth needed for this url
 	}
+}
+
+// tokenAuth builds basic auth from auth.Token, refusing plain http so the
+// token is never sent in cleartext.
+func tokenAuth(ep *transport.Endpoint, auth ports.Auth) (transport.AuthMethod, error) {
+	if ep.Protocol == "http" {
+		return nil, fmt.Errorf("%w: token auth over plain http", ErrInsecureTransport)
+	}
+
+	username := auth.Username
+	if username == "" {
+		username = defaultUser
+	}
+
+	return &http.BasicAuth{Username: username, Password: auth.Token}, nil
 }

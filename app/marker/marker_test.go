@@ -56,8 +56,63 @@ func TestWriteRead_RoundTrip(t *testing.T) {
 		t.Errorf("at location = %s, want UTC", got.At.Location())
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, File)); err != nil {
-		t.Errorf("stat %s: %v, want the marker inside the created state dir", File, err)
+	info, err := os.Stat(filepath.Join(dir, File))
+	if err != nil {
+		t.Fatalf("stat %s: %v, want the marker inside the created state dir", File, err)
+	}
+
+	if got, want := info.Mode().Perm(), os.FileMode(filePerm); got != want {
+		t.Errorf("mode = %o, want %o", got, want)
+	}
+
+	// Write goes through a temp file and rename; nothing but the marker
+	// itself may remain in the state dir afterwards.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read state dir: %v", err)
+	}
+
+	for _, e := range entries {
+		if e.Name() != File {
+			t.Errorf("unexpected file %q left in state dir", e.Name())
+		}
+	}
+}
+
+func TestWrite_Overwrite(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	if err := Write(dir, Marker{Commit: "first", At: time.Now()}); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+
+	if err := Write(dir, Marker{Commit: "second", At: time.Now()}); err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+
+	got, err := Read(dir)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	if got.Commit != "second" {
+		t.Errorf("commit = %s, want second", got.Commit)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read state dir: %v", err)
+	}
+
+	if len(entries) != 1 || entries[0].Name() != File {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+
+		t.Errorf("state dir contains %v, want only [%s]", names, File)
 	}
 }
 

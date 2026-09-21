@@ -17,7 +17,6 @@ Guidance for AI coding agents working in this repository. `CLAUDE.md` is a symli
 | `docs/` | Any documentation. |
 | `docs/agents/` | Documentation and similar written output produced by AI agents and assistants — notes, memory, plans, research reports, analyses. |
 | `hack/` | Developer tooling: scripts, generators, and anything else that is not compiled into the application itself. |
-| `hack/release/` | Release scripts. |
 
 This list is not exhaustive and will grow as the template does.
 
@@ -30,9 +29,9 @@ The image is defined in `Containerfile`. `Dockerfile` and `.dockerignore` are sy
 Build and run:
 
 ```sh
-podman build -t goapp:dev .
-podman build --build-arg VERSION=v1.2.3 --build-arg REVISION="$(git rev-parse HEAD)" -t goapp:v1.2.3 .
-podman run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges -p 8080:8080 goapp:dev
+podman build -t robbe:dev .
+podman build --build-arg VERSION=v1.2.3 --build-arg REVISION="$(git rev-parse HEAD)" -t robbe:v1.2.3 .
+podman run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges robbe:dev
 ```
 
 Build arguments: `VERSION` and `REVISION` are stamped into the binary via `-ldflags -X` and into the OCI labels. `GOARCH` defaults to the build platform's architecture; cross-build with `--build-arg GOARCH=arm64`. `GOOS` is fixed to `linux` because the runtime stage is a Linux image.
@@ -43,7 +42,6 @@ Rules for agents changing this file:
 - Do not remove or weaken `USER 65532:65532`, the `--chown=root:root --chmod=0555` on the binary, `CGO_ENABLED=0`, or the `-trimpath`/`-buildvcs=false`/`-buildid=` build flags. Each is load-bearing and the reason is in a comment beside it.
 - Keep image references fully qualified (`docker.io/library/...`). Podman does not assume Docker Hub for unqualified names.
 - Anything that must not reach an image layer belongs in `.containerignore`, not in a `COPY` exclusion.
-- The build currently fails: there is no `go.mod` and no `./cmd/app` yet. This is expected until the application skeleton exists — do not "fix" it by changing the build stage.
 
 ---
 

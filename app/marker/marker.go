@@ -17,6 +17,9 @@ import (
 // File is the name of the marker file inside the state directory.
 const File = "applied"
 
+// filePerm is the mode of the marker file; it holds nothing secret.
+const filePerm = 0o644
+
 // ErrMalformed is returned when the marker file cannot be parsed.
 var ErrMalformed = errors.New("malformed marker file")
 
@@ -52,14 +55,63 @@ func Read(stateDir string) (Marker, error) {
 }
 
 // Write writes the marker into stateDir, creating the directory if needed.
+//
+// The marker is written to a temp file in stateDir, fsynced, and renamed
+// into place so that a crash mid-write never leaves a torn or empty marker
+// behind; readers see either the old marker or the new one.
 func Write(stateDir string, m Marker) error {
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		return fmt.Errorf("create state dir: %w", err)
 	}
 
 	content := m.Commit + "\n" + m.At.UTC().Format(time.RFC3339) + "\n"
-	if err := os.WriteFile(filepath.Join(stateDir, File), []byte(content), 0o644); err != nil {
+
+	tmp, err := os.CreateTemp(stateDir, "."+File+"-*")
+	if err != nil {
 		return fmt.Errorf("write marker: %w", err)
+	}
+
+	tmpName := tmp.Name()
+
+	if err := writeAndClose(tmp, content); err != nil {
+		_ = os.Remove(tmpName)
+
+		return fmt.Errorf("write marker: %w", err)
+	}
+
+	if err := os.Rename(tmpName, filepath.Join(stateDir, File)); err != nil {
+		_ = os.Remove(tmpName)
+
+		return fmt.Errorf("write marker: %w", err)
+	}
+
+	return nil
+}
+
+// writeAndClose writes content to f, makes it world-readable, flushes it to
+// disk, and closes it. f is closed on every path.
+func writeAndClose(f *os.File, content string) error {
+	if _, err := f.WriteString(content); err != nil {
+		_ = f.Close()
+
+		return fmt.Errorf("write: %w", err)
+	}
+
+	// os.CreateTemp creates the file 0600; widen it before the rename.
+	if err := f.Chmod(filePerm); err != nil {
+		_ = f.Close()
+
+		return fmt.Errorf("chmod: %w", err)
+	}
+
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+
+		return fmt.Errorf("sync: %w", err)
+	}
+
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close: %w", err)
 	}
 
 	return nil

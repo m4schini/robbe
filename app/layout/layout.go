@@ -31,6 +31,10 @@ const (
 	ModeHosts Mode = "hosts"
 )
 
+// ErrSymlink is returned when the desired tree contains a symbolic link:
+// robbe copies file contents, so a link could publish any host file.
+var ErrSymlink = errors.New("symlink in repository")
+
 // Tree maps a path relative to the target directory to the absolute source
 // file in the checkout.
 type Tree map[string]string
@@ -105,7 +109,8 @@ func Resolve(repoDir, host string) (Tree, Layout, error) {
 
 // walkInto adds every regular file below root to tree (later calls override
 // earlier ones). Git and robbe housekeeping entries (.git*, .robbe*) are
-// skipped, .kube files are reported.
+// skipped, .kube files are reported. Symbolic links are rejected with
+// ErrSymlink so the run fails closed instead of copying host files.
 func walkInto(tree Tree, root string) ([]string, error) {
 	var skipped []string
 
@@ -124,6 +129,10 @@ func walkInto(tree Tree, root string) ([]string, error) {
 			}
 
 			return nil
+		}
+
+		if d.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("%w: %s", ErrSymlink, path)
 		}
 
 		if d.IsDir() {

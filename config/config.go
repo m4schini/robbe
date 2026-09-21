@@ -103,18 +103,26 @@ func Init() {
 
 // configure is Init without the fatal exit, so tests can observe the error.
 func configure() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("home directory: %w", err)
+	user := os.Geteuid() != 0
+
+	// Root never needs $HOME: the system unit has no User= and therefore no
+	// $HOME (systemd.exec(5)), and xdg.Defaults ignores home for root.
+	var home string
+	if user {
+		var err error
+
+		home, err = os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("home directory: %w", err)
+		}
 	}
 
-	user := os.Geteuid() != 0
 	paths := xdg.Defaults(appNameLowercase, user, home)
 
 	if ConfigFile != "" {
 		viper.SetConfigFile(ConfigFile)
 	} else {
-		for _, dir := range searchDirs(home) {
+		for _, dir := range searchDirs(user, home) {
 			viper.AddConfigPath(dir)
 		}
 
@@ -134,8 +142,13 @@ func configure() error {
 
 // searchDirs lists the directories searched for config.yaml, in order:
 // $XDG_CONFIG_HOME/<app>, <dir>/<app> for each $XDG_CONFIG_DIRS entry, and
-// /etc/<app>.
-func searchDirs(home string) []string {
+// /etc/<app>. For root (user false) the XDG variables are ignored, as
+// documented, and only /etc/<app> is searched.
+func searchDirs(user bool, home string) []string {
+	if !user {
+		return []string{filepath.Join(systemConfigRoot, appNameLowercase)}
+	}
+
 	configDirs := xdg.ConfigDirs()
 
 	roots := make([]string, 0, len(configDirs)+2) //nolint:mnd // ConfigHome in front, /etc at the end

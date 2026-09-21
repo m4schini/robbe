@@ -101,7 +101,7 @@ func resolveRuntime(cfg config.Config, log *zap.Logger) string {
 
 // printHeader writes the repo/commit/host/target/state lines of the mockup.
 func printHeader(out io.Writer, cfg config.Config, res sync.Result) {
-	fmt.Fprintf(out, "repo    %s ref=%s\n", cfg.Repo.URL, cfg.Repo.Ref)
+	fmt.Fprintf(out, "repo    %s ref=%s\n", ports.RedactURL(cfg.Repo.URL), cfg.Repo.Ref)
 
 	applied := "none"
 	if res.Previous != "" {

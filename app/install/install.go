@@ -35,8 +35,9 @@ const (
 	dirPerm  = 0o755
 )
 
-// ErrInterval is returned for a non-positive interval.
-var ErrInterval = errors.New("interval must be positive")
+// ErrInterval is returned for an interval that is not a positive whole
+// number of seconds.
+var ErrInterval = errors.New("invalid interval")
 
 // Options configure where and how the units are installed.
 type Options struct {
@@ -69,8 +70,8 @@ func UnitDir(user bool, home string) string {
 
 // Render returns the content of both units for opts.
 func Render(opts Options) (service, timer []byte, err error) {
-	if opts.Interval <= 0 {
-		return nil, nil, ErrInterval
+	if opts.Interval < time.Second || opts.Interval%time.Second != 0 {
+		return nil, nil, fmt.Errorf("%w: %s (must be whole seconds, at least 1s)", ErrInterval, opts.Interval)
 	}
 
 	data := struct {

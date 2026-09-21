@@ -3,6 +3,7 @@
 package layout
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -225,6 +226,68 @@ func TestResolve_SkippedKubeInHosts(t *testing.T) {
 
 	if _, ok := tree["k.kube"]; ok {
 		t.Errorf("tree contains k.kube, want absent")
+	}
+}
+
+func TestResolve_RejectsSymlinks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		target func(repo string) string
+	}{
+		{name: "file", target: func(repo string) string { return filepath.Join(repo, "real.env") }},
+		{name: "dir", target: func(repo string) string { return filepath.Join(repo, "realdir") }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := t.TempDir()
+			writeFiles(t, repo, map[string]string{
+				"real.env":       "R",
+				"realdir/in.env": "I",
+			})
+
+			link := filepath.Join(repo, "link")
+			if err := os.Symlink(tt.target(repo), link); err != nil {
+				t.Skipf("symlink: %v", err)
+			}
+
+			_, _, err := Resolve(repo, "alpha")
+			if !errors.Is(err, ErrSymlink) {
+				t.Fatalf("Resolve() error = %v, want ErrSymlink", err)
+			}
+		})
+	}
+}
+
+func TestResolve_HousekeepingSymlinkSkipped(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	writeFiles(t, repo, map[string]string{
+		"a.container": "A",
+		"real.env":    "R",
+	})
+
+	if err := os.Symlink(filepath.Join(repo, "real.env"), filepath.Join(repo, ".gitlink")); err != nil {
+		t.Skipf("symlink: %v", err)
+	}
+
+	tree, _, err := Resolve(repo, "alpha")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+
+	want := Tree{
+		"a.container": filepath.Join(repo, "a.container"),
+		"real.env":    filepath.Join(repo, "real.env"),
+	}
+
+	if !reflect.DeepEqual(tree, want) {
+		t.Errorf("tree = %#v, want %#v", tree, want)
 	}
 }
 

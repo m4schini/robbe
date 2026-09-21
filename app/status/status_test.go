@@ -3,12 +3,14 @@
 package status
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/m4schini/robbe/adapters/gogit"
+	"github.com/m4schini/robbe/app/lock"
 	"github.com/m4schini/robbe/app/marker"
 	"github.com/m4schini/robbe/internal/testutil"
 	"github.com/m4schini/robbe/ports"
@@ -31,12 +33,13 @@ func TestGet(t *testing.T) {
 	src := gogit.New(t.TempDir())
 
 	opts := Options{
-		URL:    repo.URL(),
-		Ref:    "main",
-		Auth:   noAuth,
-		Host:   "alpha",
-		Target: target,
-		State:  state,
+		URL:     repo.URL(),
+		Ref:     "main",
+		Auth:    noAuth,
+		Host:    "alpha",
+		Target:  target,
+		State:   state,
+		Runtime: filepath.Join(t.TempDir(), "run"),
 	}
 
 	st, err := Get(t.Context(), src, opts)
@@ -88,5 +91,33 @@ func TestGet(t *testing.T) {
 
 	if st2.Applied.Commit != st.Remote {
 		t.Errorf("Applied.Commit = %s, want %s", st2.Applied.Commit, st.Remote)
+	}
+}
+
+func TestGet_Locked(t *testing.T) {
+	t.Parallel()
+
+	repo := testutil.NewRepo(t)
+	repo.Commit("initial", map[string]string{"nginx.container": "content"})
+
+	runtime := t.TempDir()
+
+	unlock, err := lock.Acquire(runtime)
+	if err != nil {
+		t.Fatalf("lock.Acquire() error = %v", err)
+	}
+	defer unlock()
+
+	_, err = Get(t.Context(), gogit.New(t.TempDir()), Options{
+		URL:     repo.URL(),
+		Ref:     "main",
+		Auth:    noAuth,
+		Host:    "alpha",
+		Target:  t.TempDir(),
+		State:   t.TempDir(),
+		Runtime: runtime,
+	})
+	if !errors.Is(err, lock.ErrLocked) {
+		t.Fatalf("Get() error = %v, want lock.ErrLocked", err)
 	}
 }

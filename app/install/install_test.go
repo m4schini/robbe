@@ -75,21 +75,33 @@ func TestRender(t *testing.T) {
 		}
 	})
 
-	t.Run("zero interval errors", func(t *testing.T) {
-		t.Parallel()
+	invalid := []struct {
+		name     string
+		interval time.Duration
+	}{
+		{name: "zero interval errors", interval: 0},
+		{name: "negative interval errors", interval: -time.Second},
+		{name: "sub-second interval errors", interval: 500 * time.Millisecond},
+		{name: "fractional interval errors", interval: 1500 * time.Millisecond},
+	}
 
-		opts := Options{
-			User:     false,
-			UnitDir:  "/x",
-			Binary:   "/usr/local/bin/robbe",
-			Interval: 0,
-		}
+	for _, tt := range invalid {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-		_, _, err := Render(opts)
-		if !errors.Is(err, ErrInterval) {
-			t.Fatalf("Render() error = %v, want ErrInterval", err)
-		}
-	})
+			opts := Options{
+				User:     false,
+				UnitDir:  "/x",
+				Binary:   "/usr/local/bin/robbe",
+				Interval: tt.interval,
+			}
+
+			_, _, err := Render(opts)
+			if !errors.Is(err, ErrInterval) {
+				t.Fatalf("Render() error = %v, want ErrInterval", err)
+			}
+		})
+	}
 }
 
 func TestUnitDir(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-git/go-git/v5/plumbing/transport"
@@ -147,6 +148,25 @@ func TestSync_RefNotFound(t *testing.T) {
 	}
 }
 
+func TestSync_ErrorRedactsPassword(t *testing.T) {
+	t.Parallel()
+
+	src := New(t.TempDir())
+
+	_, err := src.Sync(t.Context(), "https://user:s3cret@127.0.0.1:1/x.git", "main", noAuth)
+	if err == nil {
+		t.Fatal("Sync() error = nil, want error")
+	}
+
+	if strings.Contains(err.Error(), "s3cret") {
+		t.Errorf("error leaks password: %v", err)
+	}
+
+	if !strings.Contains(err.Error(), "user:xxxxx@") {
+		t.Errorf("error missing redacted url: %v", err)
+	}
+}
+
 func TestRemoteHead(t *testing.T) {
 	t.Parallel()
 
@@ -266,6 +286,44 @@ func TestAuthMethod(t *testing.T) {
 
 				if method != nil {
 					tb.Errorf("method = %v, want nil", method)
+				}
+			},
+		},
+		{
+			name: "token over plain http",
+			url:  "http://example.com/me/x.git",
+			auth: ports.Auth{SSHKey: "", SSHKeyPassword: "", Token: "tok", Username: ""},
+			want: func(tb testing.TB, method transport.AuthMethod, err error) {
+				tb.Helper()
+
+				if !errors.Is(err, ErrInsecureTransport) {
+					tb.Fatalf("err = %v, want ErrInsecureTransport", err)
+				}
+
+				if method != nil {
+					tb.Errorf("method = %v, want nil", method)
+				}
+			},
+		},
+		{
+			name: "token with ssh url prefers agent",
+			url:  "git@github.com:me/x.git",
+			auth: ports.Auth{SSHKey: "", SSHKeyPassword: "", Token: "tok", Username: ""},
+			want: func(tb testing.TB, method transport.AuthMethod, err error) {
+				tb.Helper()
+
+				// Whether an agent is reachable depends on the environment;
+				// either way the token must not be used for an ssh url.
+				if err != nil {
+					if errors.Is(err, ErrInsecureTransport) {
+						tb.Fatalf("err = %v, want ssh agent error", err)
+					}
+
+					return
+				}
+
+				if _, ok := method.(*ssh.PublicKeysCallback); !ok {
+					tb.Errorf("method = %T, want *ssh.PublicKeysCallback", method)
 				}
 			},
 		},
