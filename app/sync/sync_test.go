@@ -176,11 +176,13 @@ func (h *fakeHost) state(unit string) string {
 
 // harness bundles a repo, a fake host and a Syncer on a temp target.
 type harness struct {
-	repo   *testutil.Repo
-	host   *fakeHost
-	runner *testutil.FakeRunner
-	syncer *Syncer
-	target string
+	repo    *testutil.Repo
+	host    *fakeHost
+	runner  *testutil.FakeRunner
+	syncer  *Syncer
+	target  string
+	state   string
+	runtime string
 }
 
 func newHarness(t *testing.T) *harness {
@@ -193,6 +195,8 @@ func newHarness(t *testing.T) *harness {
 
 	target := filepath.Join(t.TempDir(), "robbe")
 	cache := t.TempDir()
+	state := filepath.Join(t.TempDir(), "robbe")
+	runtime := filepath.Join(t.TempDir(), "robbe")
 
 	var noAuth ports.Auth
 
@@ -207,6 +211,8 @@ func newHarness(t *testing.T) *harness {
 			Host:       "alpha",
 			Target:     target,
 			Cache:      cache,
+			State:      state,
+			Runtime:    runtime,
 			User:       true,
 			AllowEmpty: false,
 		},
@@ -214,7 +220,7 @@ func newHarness(t *testing.T) *harness {
 		Now: func() time.Time { return time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC) },
 	}
 
-	return &harness{repo: repo, host: host, runner: runner, syncer: syncer, target: target}
+	return &harness{repo: repo, host: host, runner: runner, syncer: syncer, target: target, state: state, runtime: runtime}
 }
 
 func (h *harness) run(t *testing.T, dryRun bool) Result {
@@ -267,7 +273,7 @@ func (h *harness) targetFiles(t *testing.T) map[string]string {
 func (h *harness) marker(t *testing.T) marker.Marker {
 	t.Helper()
 
-	m, err := marker.Read(h.target)
+	m, err := marker.Read(h.state)
 	if err != nil {
 		t.Fatalf("marker: %v", err)
 	}
@@ -310,6 +316,17 @@ func TestSync_Apply(t *testing.T) {
 	assertEqual(t, "marker", h.marker(t).Commit, commit)
 	assertEqual(t, "marker time", h.marker(t).At, time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC))
 
+	// The marker lives in the state dir; the target holds quadlet content only.
+	if _, err := os.Stat(filepath.Join(h.state, marker.File)); err != nil {
+		t.Errorf("marker not in state dir: %v", err)
+	}
+
+	for rel := range files {
+		if strings.HasPrefix(filepath.Base(rel), ".") {
+			t.Errorf("target holds robbe file %q, want quadlet content only", rel)
+		}
+	}
+
 	assertLines(t, h.systemctlLines(), []string{
 		"daemon-reload",
 		"restart nginx.service proxy-network.service",
@@ -344,6 +361,32 @@ func TestSync_NoOpOnSameCommit(t *testing.T) {
 	assertEqual(t, "up to date", res.UpToDate, true)
 	assertEqual(t, "applied", res.Applied, false)
 	assertLines(t, h.systemctlLines(), nil)
+}
+
+func TestSync_TargetWipedReapplies(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	commit := h.repo.Commit("init", map[string]string{"nginx.container": nginx})
+	h.run(t, false)
+	h.runner.Reset()
+
+	if err := os.RemoveAll(h.target); err != nil {
+		t.Fatal(err)
+	}
+
+	res := h.run(t, false)
+
+	assertEqual(t, "up to date", res.UpToDate, false)
+	assertEqual(t, "applied", res.Applied, true)
+	assertEqual(t, "previous", res.Previous, commit)
+	assertEqual(t, "nginx.container", h.targetFiles(t)["nginx.container"], nginx)
+	assertEqual(t, "marker", h.marker(t).Commit, commit)
+	assertLines(t, h.systemctlLines(), []string{
+		"daemon-reload",
+		"restart nginx.service",
+		"is-active nginx.service",
+	})
 }
 
 func TestSync_DryRun(t *testing.T) {
@@ -565,7 +608,7 @@ func TestSync_EmptyTreeGuard(t *testing.T) {
 	res := h.run(t, false)
 
 	assertEqual(t, "layout host found", res.Layout.HostDirFound, false)
-	assertEqual(t, "files left", len(h.targetFiles(t)), 1) // only the marker
+	assertEqual(t, "files left", len(h.targetFiles(t)), 0)
 	assertEqual(t, "nginx state", h.host.state("nginx.service"), stateDown)
 }
 
@@ -587,7 +630,6 @@ func TestSync_HostsLayout(t *testing.T) {
 	assertEqual(t, "mode", string(res.Layout.Mode), "hosts")
 
 	files := h.targetFiles(t)
-	delete(files, marker.File)
 
 	keys := make([]string, 0, len(files))
 	for k := range files {
@@ -628,7 +670,11 @@ func TestSync_Locked(t *testing.T) {
 	h := newHarness(t)
 	h.repo.Commit("init", map[string]string{"nginx.container": nginx})
 
-	lock, err := os.OpenFile(filepath.Join(h.syncer.Opts.Cache, lockFileName), os.O_CREATE|os.O_RDWR, 0o644)
+	if err := os.MkdirAll(h.runtime, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	lock, err := os.OpenFile(filepath.Join(h.runtime, lockFileName), os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -641,5 +687,26 @@ func TestSync_Locked(t *testing.T) {
 	_, err = h.syncer.Run(t.Context(), false)
 	if !errors.Is(err, ErrLocked) {
 		t.Fatalf("err = %v, want ErrLocked", err)
+	}
+}
+
+func TestSync_LockDirCreated(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.repo.Commit("init", map[string]string{"nginx.container": nginx})
+
+	if _, err := os.Stat(h.runtime); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runtime dir exists before the run: %v", err)
+	}
+
+	h.run(t, true)
+
+	if _, err := os.Stat(filepath.Join(h.runtime, lockFileName)); err != nil {
+		t.Errorf("lock file not created under the runtime dir: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(h.syncer.Opts.Cache, lockFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("lock file still created in the cache: %v", err)
 	}
 }

@@ -7,3 +7,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/robbe sync
+ConfigurationDirectory=robbe
+CacheDirectory=robbe
+StateDirectory=robbe
+RuntimeDirectory=robbe

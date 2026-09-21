@@ -21,11 +21,13 @@ type Options struct {
 	Auth   ports.Auth
 	Host   string
 	Target string
+	// State is the directory holding the applied-commit marker.
+	State string
 }
 
 // Status is the result of Get.
 type Status struct {
-	// Applied is the marker in the target; zero when nothing was applied yet.
+	// Applied is the marker in the state dir; zero when nothing was applied yet.
 	Applied marker.Marker
 	// Remote is the commit ref points to on the remote.
 	Remote string
@@ -38,7 +40,7 @@ type Status struct {
 // Get reads the marker, fetches ref and diffs the desired tree of the
 // fetched commit against the target.
 func Get(ctx context.Context, src ports.Source, opts Options) (Status, error) {
-	applied, err := marker.Read(opts.Target)
+	applied, err := marker.Read(opts.State)
 	if err != nil {
 		return Status{}, fmt.Errorf("marker: %w", err)
 	}

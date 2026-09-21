@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: TODO
 
-// Package marker reads and writes <target>/.robbe-commit, the record of the
-// last applied commit.
+// Package marker reads and writes <state>/applied, the record of the last
+// applied commit. It lives in the state directory, not in the target, so
+// the target holds quadlet content only.
 package marker
 
 import (
@@ -13,8 +14,8 @@ import (
 	"time"
 )
 
-// File is the name of the marker file inside the target directory.
-const File = ".robbe-commit"
+// File is the name of the marker file inside the state directory.
+const File = "applied"
 
 // ErrMalformed is returned when the marker file cannot be parsed.
 var ErrMalformed = errors.New("malformed marker file")
@@ -25,10 +26,10 @@ type Marker struct {
 	At     time.Time
 }
 
-// Read parses <target>/.robbe-commit. A missing file yields the zero Marker
-// and no error.
-func Read(target string) (Marker, error) {
-	data, err := os.ReadFile(filepath.Join(target, File))
+// Read parses <stateDir>/applied. A missing file yields the zero Marker and
+// no error.
+func Read(stateDir string) (Marker, error) {
+	data, err := os.ReadFile(filepath.Join(stateDir, File))
 	if errors.Is(err, os.ErrNotExist) {
 		return Marker{}, nil
 	}
@@ -50,14 +51,14 @@ func Read(target string) (Marker, error) {
 	return Marker{Commit: string(bytes.TrimSpace(lines[0])), At: at}, nil
 }
 
-// Write writes the marker into target, creating the directory if needed.
-func Write(target string, m Marker) error {
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		return fmt.Errorf("create target: %w", err)
+// Write writes the marker into stateDir, creating the directory if needed.
+func Write(stateDir string, m Marker) error {
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return fmt.Errorf("create state dir: %w", err)
 	}
 
 	content := m.Commit + "\n" + m.At.UTC().Format(time.RFC3339) + "\n"
-	if err := os.WriteFile(filepath.Join(target, File), []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(stateDir, File), []byte(content), 0o644); err != nil {
 		return fmt.Errorf("write marker: %w", err)
 	}
 

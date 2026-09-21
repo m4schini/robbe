@@ -17,6 +17,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/m4schini/robbe/internal/xdg"
 	"github.com/m4schini/robbe/ports"
 	"go.uber.org/zap"
 )
@@ -63,12 +64,7 @@ func UnitDir(user bool, home string) string {
 		return "/etc/systemd/system"
 	}
 
-	base := os.Getenv("XDG_CONFIG_HOME")
-	if base == "" {
-		base = filepath.Join(home, ".config")
-	}
-
-	return filepath.Join(base, "systemd", "user")
+	return filepath.Join(xdg.ConfigHome(home), "systemd", "user")
 }
 
 // Render returns the content of both units for opts.

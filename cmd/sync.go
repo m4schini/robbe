@@ -5,6 +5,7 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/m4schini/robbe/adapters/generator"
@@ -17,6 +18,7 @@ import (
 	"github.com/m4schini/robbe/ports"
 	"github.com/m4schini/robbe/telemetry"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var (
@@ -34,6 +36,8 @@ var syncCmd = &cobra.Command{
 			return fmt.Errorf("load config: %w", err)
 		}
 
+		log := telemetry.Logger("sync")
+
 		runner := osexec.New()
 		syncer := &sync.Syncer{
 			Source:    gogit.New(cfg.Cache),
@@ -46,10 +50,12 @@ var syncCmd = &cobra.Command{
 				Host:       cfg.Host,
 				Target:     cfg.Target,
 				Cache:      cfg.Cache,
+				State:      cfg.State,
+				Runtime:    resolveRuntime(cfg, log),
 				User:       cfg.User,
 				AllowEmpty: syncAllowEmpty,
 			},
-			Log: telemetry.Logger("sync"),
+			Log: log,
 			Now: nil,
 		}
 
@@ -79,7 +85,21 @@ var syncCmd = &cobra.Command{
 	},
 }
 
-// printHeader writes the repo/commit/host/target lines of the mockup.
+// resolveRuntime returns the directory for the lock file: cfg.Runtime when
+// configured, otherwise the cache with a warning. The spec leaves the
+// XDG_RUNTIME_DIR fallback to the application; the cache is per-user and
+// not world-writable, unlike /tmp.
+func resolveRuntime(cfg config.Config, log *zap.Logger) string {
+	if cfg.Runtime != "" {
+		return cfg.Runtime
+	}
+
+	log.Warn("XDG_RUNTIME_DIR unset, lock falls back to cache", zap.String("path", filepath.Join(cfg.Cache, "lock")))
+
+	return cfg.Cache
+}
+
+// printHeader writes the repo/commit/host/target/state lines of the mockup.
 func printHeader(out io.Writer, cfg config.Config, res sync.Result) {
 	fmt.Fprintf(out, "repo    %s ref=%s\n", cfg.Repo.URL, cfg.Repo.Ref)
 
@@ -95,6 +115,7 @@ func printHeader(out io.Writer, cfg config.Config, res sync.Result) {
 	}
 
 	fmt.Fprintf(out, "target  %s\n", cfg.Target)
+	fmt.Fprintf(out, "state   %s\n", cfg.State)
 }
 
 func describeLayout(lay layout.Layout) string {

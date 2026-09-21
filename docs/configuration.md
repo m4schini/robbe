@@ -6,15 +6,33 @@ values win over the defaults.
 
 ## Config file search order
 
-robbe looks for a file named `.robbe.yaml` in, in this order:
+robbe reads one YAML file, `config.yaml`, resolved in this order. The first
+hit wins; robbe does not merge multiple files.
 
-1. `/etc/robbe/.robbe.yaml` (Linux only)
-2. `~/.robbe.yaml`
-3. `./.robbe.yaml` (current working directory)
+1. The file given with `--config <path>`. It must exist and parse; a missing
+   or unreadable path is an error.
+2. `$XDG_CONFIG_HOME/robbe/config.yaml` (default `~/.config/robbe/config.yaml`).
+3. `<dir>/robbe/config.yaml` for each entry of `$XDG_CONFIG_DIRS`, in order
+   (default `/etc/xdg/robbe/config.yaml`).
+4. `/etc/robbe/config.yaml`.
 
-The first one found is used; the rest are ignored (robbe does not merge
-multiple config files). If none is found, robbe falls back to defaults and
-environment variables only.
+If no file is found robbe uses defaults and environment variables only. A
+file that is found but does not parse is an error, not a silent fallback.
+
+The legacy locations `~/.robbe.yaml`, `/etc/robbe/.robbe.yaml` and
+`./.robbe.yaml` are not read.
+
+## XDG variables
+
+The default directories follow the
+[XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/).
+An XDG variable that is unset, empty or holds a relative path is ignored and
+the spec fallback applies (`~/.config`, `~/.cache`, `~/.local/state`,
+`/etc/xdg`). `XDG_RUNTIME_DIR` has no spec fallback; see the `runtime` key.
+
+When robbe runs as root (euid 0) the XDG variables are ignored and the
+system-wide directories are used: `/etc/robbe`, `/var/cache/robbe`,
+`/var/lib/robbe`, `/run/robbe` and `/etc/containers/systemd/robbe`.
 
 ## Environment variables
 
@@ -38,8 +56,10 @@ true) switches the logger from production to development output. It is not a
 | `repo.auth.token` | `ROBBE_REPO_AUTH_TOKEN` | *(empty)* | HTTP token/password used for token auth over HTTPS. |
 | `repo.auth.username` | `ROBBE_REPO_AUTH_USERNAME` | *(empty, defaults to `git` when a token is used)* | HTTP username paired with `repo.auth.token`. |
 | `host` | `ROBBE_HOST` | result of `os.Hostname()` | Selects `hosts/<host>/` in the repository. |
-| `target` | `ROBBE_TARGET` | `~/.config/containers/systemd/robbe` (non-root), `/etc/containers/systemd/robbe` (root) | Directory the desired quadlet tree is written to. Non-root default honours `$XDG_CONFIG_HOME` in place of `~/.config`. |
-| `cache` | `ROBBE_CACHE` | `~/.cache/robbe` (non-root), `/var/cache/robbe` (root) | Directory holding the git clone and staging tree. Non-root default honours `$XDG_CACHE_HOME` in place of `~/.cache`. |
+| `target` | `ROBBE_TARGET` | `$XDG_CONFIG_HOME/containers/systemd/robbe` (non-root), `/etc/containers/systemd/robbe` (root) | Directory the desired quadlet tree is written to. It holds quadlet content only. |
+| `cache` | `ROBBE_CACHE` | `$XDG_CACHE_HOME/robbe` (non-root), `/var/cache/robbe` (root) | Directory holding the git clone (`repo/`) and the staging tree (`staging/`). |
+| `state` | `ROBBE_STATE` | `$XDG_STATE_HOME/robbe` (non-root), `/var/lib/robbe` (root) | Directory holding `applied`, the record of the last applied commit (hash and timestamp). `robbe sync` short-circuits only when this file names the fetched commit and the target directory exists; a wiped target is re-applied. |
+| `runtime` | `ROBBE_RUNTIME` | `$XDG_RUNTIME_DIR/robbe` (non-root), `/run/robbe` (root) | Directory holding the `lock` file. When `XDG_RUNTIME_DIR` is unset for a non-root user the default is empty and robbe logs a warning and uses `<cache>/lock` instead. |
 | `generator` | `ROBBE_GENERATOR` | `/usr/lib/systemd/system-generators/podman-system-generator` | Path to the `podman-system-generator` binary used to validate quadlet units. |
 | `user` | `ROBBE_USER` | `true` when running as a non-root user (`os.Geteuid() != 0`), `false` when running as root | Selects the systemd user scope (`systemctl --user`, generator `-user`) vs. the system scope. |
 
@@ -61,7 +81,7 @@ Known-hosts checking for SSH uses the go-git default location,
 
 ## Examples
 
-### SSH key setup (`~/.robbe.yaml`)
+### SSH key setup (`~/.config/robbe/config.yaml`)
 
 ```yaml
 repo:
@@ -74,9 +94,13 @@ repo:
 host: alpha
 target: /home/me/.config/containers/systemd/robbe
 cache: /home/me/.cache/robbe
+state: /home/me/.local/state/robbe
+runtime: /run/user/1000/robbe
 generator: /usr/lib/systemd/system-generators/podman-system-generator
 user: true
 ```
+
+Every path above is the non-root default; only `repo` is required.
 
 ### Token setup, environment variables only
 

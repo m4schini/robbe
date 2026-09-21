@@ -28,4 +28,5 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(config.Init)
+	rootCmd.PersistentFlags().StringVar(&config.ConfigFile, "config", "", "config file (default: XDG search, see docs/configuration.md)")
 }

@@ -29,6 +29,7 @@ var statusCmd = &cobra.Command{
 			Auth:   ports.Auth(cfg.Repo.Auth),
 			Host:   cfg.Host,
 			Target: cfg.Target,
+			State:  cfg.State,
 		})
 		if err != nil {
 			return fmt.Errorf("status: %w", err)

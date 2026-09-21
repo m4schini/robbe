@@ -32,14 +32,14 @@ func TestResolve_Flat(t *testing.T) {
 
 	repo := t.TempDir()
 	writeFiles(t, repo, map[string]string{
-		"a.container":   "A",
-		"sub/b.env":     "B",
-		".hidden":       "H",
-		".env":          "E",
-		".gitignore":    "GI",
-		".robbe-commit": "RC",
-		".git/config":   "G",
-		"k.kube":        "K",
+		"a.container":  "A",
+		"sub/b.env":    "B",
+		".hidden":      "H",
+		".env":         "E",
+		".gitignore":   "GI",
+		".robbe-tmp-1": "RT",
+		".git/config":  "G",
+		"k.kube":       "K",
 	})
 
 	tree, lay, err := Resolve(repo, "alpha")

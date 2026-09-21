@@ -41,6 +41,13 @@ func TestRender(t *testing.T) {
 			t.Errorf("service = %q, want to contain %q", service, "ExecStart=/usr/local/bin/robbe sync")
 		}
 
+		// systemd creates the four directories (XDG mapped for user units).
+		for _, want := range []string{"ConfigurationDirectory=robbe", "CacheDirectory=robbe", "StateDirectory=robbe", "RuntimeDirectory=robbe"} {
+			if !strings.Contains(string(service), want) {
+				t.Errorf("service = %q, want to contain %q", service, want)
+			}
+		}
+
 		for _, want := range []string{"OnUnitActiveSec=300s", "OnBootSec=1min", "Persistent=true", "WantedBy=timers.target"} {
 			if !strings.Contains(string(timer), want) {
 				t.Errorf("timer = %q, want to contain %q", timer, want)
@@ -100,6 +107,13 @@ func TestUnitDir(t *testing.T) {
 
 	if got, want := UnitDir(true, "/home/x"), filepath.Join("/xdg", "systemd", "user"); got != want {
 		t.Errorf("UnitDir(true, ...) = %q, want %q", got, want)
+	}
+
+	// A relative XDG_CONFIG_HOME must be ignored per the XDG spec.
+	t.Setenv("XDG_CONFIG_HOME", "relative/xdg")
+
+	if got, want := UnitDir(true, "/home/x"), filepath.Join("/home/x", ".config", "systemd", "user"); got != want {
+		t.Errorf("UnitDir(true, ...) with relative XDG_CONFIG_HOME = %q, want %q", got, want)
 	}
 }
 

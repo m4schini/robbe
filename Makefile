@@ -11,7 +11,7 @@ INTEGRATION_TAG := integration
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-.PHONY: help build lint test test-integration
+.PHONY: help build lint check-units test test-integration
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -20,8 +20,16 @@ help: ## Show this help
 build: ## Build the robbe binary into ./bin
 	$(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/robbe .
 
-lint: ## Run golangci-lint
+lint: check-units ## Run golangci-lint and the unit-file drift check
 	golangci-lint run ./...
+
+# deploy/systemd/robbe-sync.service is the reference copy of the embedded
+# template with the binary path filled in. Both must agree line for line
+# apart from that substitution, so a directive added to one cannot be
+# forgotten in the other.
+check-units: ## Check that the reference service unit matches the embedded template
+	@sed 's#/usr/local/bin/robbe#{{.Binary}}#' deploy/systemd/robbe-sync.service | diff - app/install/templates/robbe-sync.service \
+		&& echo "check-units: deploy/systemd/robbe-sync.service matches app/install/templates/robbe-sync.service"
 
 test: ## Run the tests (no build tags)
 	$(GO) test $(GOTESTFLAGS) $(PKGS)

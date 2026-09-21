@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/m4schini/robbe/app/layout"
-	"github.com/m4schini/robbe/app/marker"
 )
 
 // writeTree writes files (slash-separated relative path -> content) under
@@ -234,30 +233,6 @@ func TestDiff_RemovedSupportFileRestartsAll(t *testing.T) {
 
 	if len(p.Stop) != 0 {
 		t.Errorf("Stop = %v, want empty", p.Stop)
-	}
-}
-
-func TestDiff_MarkerIgnored(t *testing.T) {
-	t.Parallel()
-
-	srcDir := t.TempDir()
-	targetDir := t.TempDir()
-
-	desired := writeTree(t, srcDir, map[string]string{
-		"a.container": "A",
-	})
-	writeTarget(t, targetDir, map[string]string{
-		"a.container": "A",
-		marker.File:   "commit\n2024-01-01T00:00:00Z\n",
-	})
-
-	p, err := Diff(desired, targetDir, nil, nil)
-	if err != nil {
-		t.Fatalf("Diff() error = %v", err)
-	}
-
-	if !p.Empty() {
-		t.Errorf("Empty() = false, want true (plan = %+v)", p)
 	}
 }
 

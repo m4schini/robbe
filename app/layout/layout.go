@@ -167,8 +167,8 @@ func (t Tree) Paths() []string {
 }
 
 // isHousekeeping reports names that never belong to the desired tree:
-// git metadata (.git, .gitignore, ...) and robbe's own files (.robbe-commit,
-// .robbe-tmp-*).
+// git metadata (.git, .gitignore, ...) and robbe's own temporary files
+// (.robbe-tmp-*, left behind by an interrupted atomic write).
 func isHousekeeping(name string) bool {
 	return strings.HasPrefix(name, ".git") || strings.HasPrefix(name, ".robbe")
 }

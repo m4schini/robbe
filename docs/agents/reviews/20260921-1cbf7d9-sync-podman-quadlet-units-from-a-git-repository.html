@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>deepreview — m4schini/myprojectclone-go feat/quadlet-gitops</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --border: #d8dce2;
+    --text: #14171c;
+    --muted: #5b6472;
+    --code-bg: #f2f3f5;
+    --critical: #a4142a;
+    --critical-bg: #fdeaed;
+    --style: #8a5000;
+    --style-bg: #fdf2dd;
+    --suggestion: #14508a;
+    --suggestion-bg: #e8f1fb;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 2.5rem 1.25rem 5rem;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  main { max-width: 60rem; margin: 0 auto; }
+
+  code, pre, .mono {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.875em;
+  }
+
+  code { background: var(--code-bg); border-radius: 3px; padding: 0.1em 0.35em; }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    overflow-x: auto;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+
+  a { color: var(--suggestion); }
+
+  /* ---- header ---- */
+  header {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 2rem;
+  }
+  header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; line-height: 1.3; }
+  header .subject { margin: 0 0 1rem; color: var(--muted); font-size: 1rem; }
+
+  dl.meta {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.35rem 1rem;
+    margin: 0;
+    font-size: 0.9375rem;
+  }
+  dl.meta dt { color: var(--muted); }
+  dl.meta dd { margin: 0; }
+
+  ul.files { margin: 0; padding-left: 1.1rem; }
+  ul.files li { margin: 0.1rem 0; }
+
+  /* ---- sections ---- */
+  section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.5rem;
+  }
+  section > h2 {
+    margin: 0 0 0.25rem;
+    font-size: 1.2rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+  section > .section-note { margin: 0 0 1.25rem; color: var(--muted); font-size: 0.9375rem; }
+  h3.file { margin: 1.75rem 0 0.75rem; font-size: 1rem; }
+  h3.file code { background: none; padding: 0; }
+
+  /* ---- summary table ---- */
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9375rem; }
+  thead th {
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+    padding: 0.5rem 0.6rem;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  tbody td { border-bottom: 1px solid var(--border); padding: 0.55rem 0.6rem; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.id { white-space: nowrap; font-weight: 600; }
+  td.loc { white-space: nowrap; }
+
+  /* ---- severity badges ---- */
+  .badge {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 0.1rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .badge.critical   { background: var(--critical-bg);   color: var(--critical); }
+  .badge.style      { background: var(--style-bg);      color: var(--style); }
+  .badge.suggestion { background: var(--suggestion-bg); color: var(--suggestion); }
+
+  /* ---- finding cards ---- */
+  .finding {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .finding.critical   { border-left-color: var(--critical); }
+  .finding.style      { border-left-color: var(--style); }
+  .finding.suggestion { border-left-color: var(--suggestion); }
+
+  /* BEGIN dr-apply-states (injected into pre-existing reports by /dr-apply — keep delimiters) */
+  .badge.fixed { background: #e6f4ea; color: #1a6b34; }
+  .finding.fixed { opacity: 0.6; border-left-color: #1a6b34; }
+  .finding.fixed .headline { text-decoration: line-through; }
+  tr.fixed td { opacity: 0.6; }
+  tr.fixed td:last-child { text-decoration: line-through; }
+  .finding .fixed-note { color: #1a6b34; font-size: 0.9375rem; font-weight: 600; }
+  .badge.in-progress { background: var(--style-bg); color: var(--style); }
+  .finding.in-progress { border-left-style: dashed; }
+  /* END dr-apply-states */
+
+  .finding-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .finding-head .fid { font-weight: 700; }
+  .finding-head .loc { color: var(--muted); }
+  .finding-head .headline { flex-basis: 100%; font-weight: 600; }
+
+  .finding p { margin: 0.5rem 0; }
+  .finding .label { font-weight: 600; }
+  .finding .ref { color: var(--muted); font-size: 0.9375rem; }
+  .finding .also { color: var(--muted); font-size: 0.9375rem; }
+
+  ul.compact { margin: 0.5rem 0 0; padding-left: 1.1rem; }
+  ul.compact li { margin: 0.25rem 0; }
+
+  .not-installed { color: var(--muted); font-size: 0.9375rem; margin-top: 1rem; }
+
+  footer { max-width: 60rem; margin: 2rem auto 0; color: var(--muted); font-size: 0.875rem; }
+  footer p { margin: 0.25rem 0; }
+  footer .stats { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; }
+  footer .stats .sep { opacity: 0.5; }
+  footer .added   { color: #1a6b34; font-weight: 600; }
+  footer .removed { color: var(--critical); font-weight: 600; }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    header, section { border: none; padding: 0 0 1rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <h1>Code review — m4schini/myprojectclone-go</h1>
+  <p class="subject">Branch review: <code>feat/quadlet-gitops</code> vs <code>main</code>, including uncommitted worktree changes (XDG base directories). No pull request exists yet.</p>
+  <dl class="meta">
+    <dt>Reviewed</dt><dd>2026-09-21</dd>
+    <dt>Commit</dt><dd><code>1cbf7d9</code> (plus uncommitted worktree)</dd>
+    <dt>Stacks</dt><dd>go, systemd units / Makefile / Containerfile / pre-commit / Markdown docs (general checklist) (+OWASP)</dd>
+    <dt>Changed files</dt>
+    <dd>
+      <ul class="files">
+        <li><code>.gitignore</code></li>
+        <li><code>.golangci.yml</code></li>
+        <li><code>.pre-commit-config.yaml</code></li>
+        <li><code>AGENTS.md</code></li>
+        <li><code>CLAUDE.md</code></li>
+        <li><code>Containerfile</code></li>
+        <li><code>Makefile</code></li>
+        <li><code>README.md</code></li>
+        <li><code>adapters/generator/validator.go</code></li>
+        <li><code>adapters/generator/validator_integration_test.go</code></li>
+        <li><code>adapters/generator/validator_test.go</code></li>
+        <li><code>adapters/gogit/source.go</code></li>
+        <li><code>adapters/gogit/source_test.go</code></li>
+        <li><code>adapters/osexec/runner.go</code></li>
+        <li><code>adapters/systemctl/units.go</code></li>
+        <li><code>adapters/systemctl/units_test.go</code></li>
+        <li><code>app/install/install.go</code></li>
+        <li><code>app/install/install_test.go</code></li>
+        <li><code>app/install/templates/robbe-sync.service</code></li>
+        <li><code>app/install/templates/robbe-sync.timer</code></li>
+        <li><code>app/layout/layout.go</code></li>
+        <li><code>app/layout/layout_test.go</code></li>
+        <li><code>app/marker/marker.go</code></li>
+        <li><code>app/marker/marker_test.go</code></li>
+        <li><code>app/plan/plan.go</code></li>
+        <li><code>app/plan/plan_test.go</code></li>
+        <li><code>app/status/status.go</code></li>
+        <li><code>app/status/status_test.go</code></li>
+        <li><code>app/sync/sync.go</code></li>
+        <li><code>app/sync/sync_test.go</code></li>
+        <li><code>cmd/install.go</code></li>
+        <li><code>cmd/root.go</code></li>
+        <li><code>cmd/status.go</code></li>
+        <li><code>cmd/sync.go</code></li>
+        <li><code>cmd/sync_test.go</code></li>
+        <li><code>cmd/version.go</code></li>
+        <li><code>config/config.go</code></li>
+        <li><code>config/config_test.go</code></li>
+        <li><code>config/defaults.go</code></li>
+        <li><code>deploy/helm/README</code> (deleted)</li>
+        <li><code>deploy/quadlet/README</code> (deleted)</li>
+        <li><code>deploy/systemd/README.md</code></li>
+        <li><code>deploy/systemd/robbe-sync.service</code></li>
+        <li><code>deploy/systemd/robbe-sync.timer</code></li>
+        <li><code>docs/agents/plans/2026-09-20-quadlet-gitops.md</code></li>
+        <li><code>docs/agents/plans/2026-09-21-xdg-base-directories.md</code></li>
+        <li><code>docs/configuration.md</code></li>
+        <li><code>docs/layout.md</code></li>
+        <li><code>go.mod</code></li>
+        <li><code>go.sum</code></li>
+        <li><code>internal/testutil/repo.go</code></li>
+        <li><code>internal/testutil/runner.go</code></li>
+        <li><code>internal/xdg/xdg.go</code></li>
+        <li><code>internal/xdg/xdg_test.go</code></li>
+        <li><code>main.go</code></li>
+        <li><code>ports/exec.go</code></li>
+        <li><code>ports/source.go</code></li>
+        <li><code>ports/units.go</code></li>
+        <li><code>ports/validator.go</code></li>
+        <li><code>quadlet/quadlet.go</code></li>
+        <li><code>quadlet/quadlet_test.go</code></li>
+        <li><code>telemetry/logger.go</code></li>
+      </ul>
+    </dd>
+  </dl>
+</header>
+
+<section id="summary">
+  <h2>📋 Summary</h2>
+  <p>Reviewed the whole <code>feat/quadlet-gitops</code> branch against <code>main</code> plus the uncommitted XDG base-directory change (62 files, Go 1.26, systemd units, Makefile, Containerfile, pre-commit config and Markdown docs) against the deepreview Go rules and the OWASP cross-cutting rules, with gofmt, go vet, golangci-lint, trivy and govulncheck. The hexagonal layout is clean, the sync transaction ordering is sound and fails closed in the common path, and the tests are table-driven and reasonable. The branch is <strong>not mergeable as-is</strong>: the system-scope (root) timer never runs at all because <code>config.configure</code> calls <code>os.UserHomeDir()</code> in an environment without <code>$HOME</code> (reproduced with <code>env -i</code>); a moved unit file is never removed from the target (reproduced); a target path with a trailing slash lets the prune step delete the target directory and its empty ancestors (reproduced); a single-unit <code>is-active</code> call with empty output is treated as "stopped" and the unit file removed (reproduced); <code>robbe status</code> rewrites the shared clone without the sync lock; the lock lives in a directory systemd deletes on every service stop; repository symlinks are followed into host files (reproduced); a torn marker write is unrecoverable; and <code>golang.org/x/crypto</code> v0.53.0 carries two reachable SSH client DoS CVEs. On top of that, seven documented behaviours (four in <code>docs/layout.md</code>, two in <code>docs/configuration.md</code>, one in <code>AGENTS.md</code>) do not match the code; those files are outside <code>docs/agents/</code>, so a human must edit them or the code must follow the docs. Style findings are small; the missing <code>.artifact</code> quadlet type and the complete absence of timeouts are worth a follow-up.</p>
+  <p class="section-note">
+    <span class="badge critical">18 critical</span>
+    <span class="badge style">14 style</span>
+    <span class="badge suggestion">25 suggestions</span>
+  </p>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Severity</th><th>File:Line</th><th>Issue</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="id">C1</td><td><span class="badge critical">critical</span></td><td class="loc"><code>AGENTS.md:46</code></td><td>container-build rules contradict the repo (stale "build fails" bullet, missing ignore files, phantom port)</td></tr>
+      <tr><td class="id">C2</td><td><span class="badge critical">critical</span></td><td class="loc"><code>adapters/gogit/source.go:188</code></td><td>auth precedence differs from <code>docs/configuration.md</code></td></tr>
+      <tr><td class="id">C3</td><td><span class="badge critical">critical</span></td><td class="loc"><code>adapters/systemctl/units.go:63</code></td><td><code>is-active</code> with empty output drops the error for a single unit and reports it stopped</td></tr>
+      <tr><td class="id">C4</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/install/install.go:72</code></td><td>sub-second <code>--interval</code> renders <code>OnUnitActiveSec=0s</code></td></tr>
+      <tr><td class="id">C5</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/layout/layout.go:112</code></td><td>symlinks in the repository are followed; host files copied into the target</td></tr>
+      <tr><td class="id">C6</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/layout/layout.go:172</code></td><td>docs say hidden files are ignored; code applies them</td></tr>
+      <tr><td class="id">C7</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/marker/marker.go:61</code></td><td>non-atomic marker write; a torn file makes every later run fail</td></tr>
+      <tr><td class="id">C8</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/status/status.go:48</code></td><td><code>robbe status</code> mutates the shared clone without taking the sync lock</td></tr>
+      <tr><td class="id">C9</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:114</code></td><td>credentials embedded in <code>repo.url</code> reach the journal, stdout and error strings</td></tr>
+      <tr><td class="id">C10</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:454</code></td><td>moved/renamed unit file is never removed from the target</td></tr>
+      <tr><td class="id">C11</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:483</code></td><td>lock file lives in a directory systemd deletes on every service stop</td></tr>
+      <tr><td class="id">C12</td><td><span class="badge critical">critical</span></td><td class="loc"><code>app/sync/sync.go:613</code></td><td>unclean target path defeats the prune guard; target and ancestors deleted</td></tr>
+      <tr><td class="id">C13</td><td><span class="badge critical">critical</span></td><td class="loc"><code>config/config.go:106</code></td><td><code>os.UserHomeDir()</code> fails under the system (root) unit; every command exits 1</td></tr>
+      <tr><td class="id">C14</td><td><span class="badge critical">critical</span></td><td class="loc"><code>docs/configuration.md:33</code></td><td>docs say root ignores XDG variables; config search still honours them</td></tr>
+      <tr><td class="id">C15</td><td><span class="badge critical">critical</span></td><td class="loc"><code>docs/layout.md:50</code></td><td>docs say an empty tree removes every managed file; code refuses without <code>--allow-empty</code></td></tr>
+      <tr><td class="id">C16</td><td><span class="badge critical">critical</span></td><td class="loc"><code>docs/layout.md:61</code></td><td>docs say <code>.robbe-*</code> files are cleaned; code removes only <code>.robbe-tmp-*</code></td></tr>
+      <tr><td class="id">C17</td><td><span class="badge critical">critical</span></td><td class="loc"><code>docs/layout.md:84</code></td><td>restart table overclaims (<code>start</code> vs <code>restart</code>, "every managed unit" vs workloads only)</td></tr>
+      <tr><td class="id">C18</td><td><span class="badge critical">critical</span></td><td class="loc"><code>go.mod:44</code></td><td><code>golang.org/x/crypto</code> v0.53.0 has two reachable SSH client DoS CVEs</td></tr>
+      <tr><td class="id">S1</td><td><span class="badge style">style</span></td><td class="loc"><code>.pre-commit-config.yaml:50</code></td><td>comment references a Taskfile and a pin-drift hook that do not exist</td></tr>
+      <tr><td class="id">S2</td><td><span class="badge style">style</span></td><td class="loc"><code>README.md:48</code></td><td><code>[--interval 5m]</code> reads as the default; default is 10s, reference timer says 5min</td></tr>
+      <tr><td class="id">S3</td><td><span class="badge style">style</span></td><td class="loc"><code>README.md:86</code></td><td>project layout omits <code>internal/</code>; <code>make lint</code> also runs <code>check-units</code></td></tr>
+      <tr><td class="id">S4</td><td><span class="badge style">style</span></td><td class="loc"><code>adapters/generator/validator.go:144</code></td><td>dot-prefixed unit files exempt from the "no unit generated" check without reason</td></tr>
+      <tr><td class="id">S5</td><td><span class="badge style">style</span></td><td class="loc"><code>adapters/generator/validator.go:163</code></td><td><code>HasPrefix(rel, "..")</code> misclassifies <code>..x.container</code> as outside the directory</td></tr>
+      <tr><td class="id">S6</td><td><span class="badge style">style</span></td><td class="loc"><code>app/sync/sync.go:493</code></td><td><code>syscall.Flock</code> in new code; prefer <code>golang.org/x/sys/unix</code></td></tr>
+      <tr><td class="id">S7</td><td><span class="badge style">style</span></td><td class="loc"><code>cmd/root.go:23</code></td><td>no cancellation or timeout anywhere; oneshot service timeout disabled by default</td></tr>
+      <tr><td class="id">S8</td><td><span class="badge style">style</span></td><td class="loc"><code>config/config.go:81</code></td><td>garbled doc comment</td></tr>
+      <tr><td class="id">S9</td><td><span class="badge style">style</span></td><td class="loc"><code>deploy/systemd/robbe-sync.timer:7</code></td><td><code>Persistent=true</code> has no effect without <code>OnCalendar=</code></td></tr>
+      <tr><td class="id">S10</td><td><span class="badge style">style</span></td><td class="loc"><code>deploy/systemd/robbe-sync.service:4</code></td><td><code>network-online.target</code> does not exist in the user manager</td></tr>
+      <tr><td class="id">S11</td><td><span class="badge style">style</span></td><td class="loc"><code>go.mod:20</code></td><td>module not tidy (<code>go-git</code> marked indirect, unused requires, missing go.sum entries)</td></tr>
+      <tr><td class="id">S12</td><td><span class="badge style">style</span></td><td class="loc"><code>internal/xdg/xdg.go:33</code></td><td><code>Paths.Config</code> is set but never read</td></tr>
+      <tr><td class="id">S13</td><td><span class="badge style">style</span></td><td class="loc"><code>quadlet/quadlet.go:14</code></td><td><code>.artifact</code> quadlet type unknown; treated as a support file</td></tr>
+      <tr><td class="id">S14</td><td><span class="badge style">style</span></td><td class="loc"><code>telemetry/logger.go:6</code></td><td>import grouping inconsistent with the rest of the module</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="critical">
+  <h2>🚨 Critical Issues</h2>
+  <p class="section-note">Must be fixed — correctness, error handling, resource leaks, security, API contract violations.</p>
+
+  <h3 class="file"><code>AGENTS.md</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C1</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">AGENTS.md:29,33-37,46</span>
+      <span class="headline">Container-build rules contradict the repository state</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> Line 46 still says "The build currently fails: there is no <code>go.mod</code> and no <code>./cmd/app</code> yet ... do not 'fix' it by changing the build stage." That is stale on this very branch: <code>go.mod</code> exists and <code>Containerfile:23</code> was changed in this diff to build <code>.</code>. Line 29 claims <code>.dockerignore</code> is a symlink to <code>.containerignore</code>, but neither file exists, so <code>COPY . .</code> ships <code>.git/</code>, <code>.idea/</code> and <code>bin/</code> into the build stage. Line 37 runs the image with <code>-p 8080:8080</code> although <code>EXPOSE 8080</code> was removed and <code>deploy/systemd/README.md:3-5</code> says robbe is not shipped as a container; the <code>hack/release/</code> row in the directory table (line 21) points at a directory that does not exist. Agents follow this file literally, so a wrong instruction is an active hazard.</p>
+    <p><span class="label">✅ Fix:</span> This file is outside <code>docs/agents/</code>, so a human must edit it. Drop the "build currently fails" bullet, either add the ignore files or remove the sentence about them, drop the port mapping, and drop or create <code>hack/release/</code>. If the container build is kept:</p>
+    <pre><code># .containerignore
+.git
+.idea
+bin
+docs
+deploy
+*.md
+</code></pre>
+    <pre><code>ln -s .containerignore .dockerignore</code></pre>
+    <p class="ref">📖 AGENTS.md contract (general checklist 2, 8); OWASP A03:2025 (build hygiene). Confirmed by <code>ls -la</code> and <code>git diff main -- Containerfile</code>.</p>
+    <p class="also">also: <code>Containerfile:20</code> (<code>COPY . .</code> without an ignore file)</p>
+  </div>
+
+  <h3 class="file"><code>adapters/gogit/source.go</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C2</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">adapters/gogit/source.go:188-212</span>
+      <span class="headline">Auth precedence differs from docs/configuration.md</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>docs/configuration.md:70-77</code> documents the order ssh_key, then the SSH agent when the URL is an ssh URL, then token, then none. The <code>switch</code> in <code>authMethod</code> checks ssh_key, then token, then the ssh protocol. With a token configured and an ssh URL, the code returns <code>http.BasicAuth</code>, which the ssh transport rejects, so it fails closed, but the documented behaviour (agent auth) never happens. Low blast radius, but a documented contract is violated.</p>
+    <p><span class="label">✅ Fix:</span> Reorder the cases to match the docs (or have a human fix the docs), add a <code>TestAuthMethod</code> case for token + ssh URL, and reject a token over plain <code>http://</code> because it would be sent in cleartext:</p>
+    <pre><code>switch {
+case auth.SSHKey != "":
+    // unchanged
+case ep.Protocol == "ssh":
+    agent, err := ssh.NewSSHAgentAuth(user)
+    // unchanged
+case auth.Token != "":
+    if ep.Protocol == "http" {
+        return nil, fmt.Errorf("%w: token auth over plain http", ErrInsecureTransport)
+    }
+    // unchanged
+}
+</code></pre>
+    <p class="ref">📖 General checklist 8 (docs contract); OWASP A04:2025 (cleartext credentials). Confirmed by reading <code>source.go:188-212</code> against <code>docs/configuration.md:70-77</code>.</p>
+  </div>
+
+  <h3 class="file"><code>adapters/systemctl/units.go</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C3</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">adapters/systemctl/units.go:63-72</span>
+      <span class="headline">is-active with empty output drops the error for a single unit</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>ActiveStates</code> splits <code>strings.TrimSpace(stdout)</code> on newlines and compares the line count with the unit count. When <code>systemctl</code> could not run at all (binary missing, bus down, context cancelled) stdout is empty and <code>strings.Split("", "\n")</code> returns <code>[""]</code> — per the Go docs, "If s does not contain sep and sep is not empty, Split returns a slice of length 1 whose only element is s." With exactly one unit the length check passes, the runner error and stderr are discarded, and the method returns <code>{unit: ""}</code> with a nil error. The consumer in <code>app/sync/sync.go:385</code> treats <code>""</code> as neither up nor "deactivating", marks the unit stopped and removes its file although systemctl never answered. The existing test only covers the two-unit case.</p>
+    <p><span class="label">✅ Fix:</span></p>
+    <pre><code>stdout, err := m.run(ctx, "is-active", units...)
+
+out := strings.TrimSpace(string(stdout))
+if out == "" {
+    if err != nil {
+        return nil, err
+    }
+    return nil, fmt.Errorf("%w: is-active printed nothing for %d units", ErrUnexpectedOutput, len(units))
+}
+
+lines := strings.Split(out, "\n")
+if len(lines) != len(units) {
+    // unchanged
+}
+</code></pre>
+    <p class="ref">📖 go/RULES.md#3 (errors never discarded); OWASP A10:2025 (fail closed). Confirmed by a reproduction test in a scratchpad copy: <code>TestActiveStates_EmptyStdoutWithError</code> failed with <code>ActiveStates() error = nil, want != nil; got = map[web.service:]</code>.</p>
+  </div>
+
+  <h3 class="file"><code>app/install/install.go</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C4</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">app/install/install.go:72-81</span>
+      <span class="headline">Sub-second --interval renders OnUnitActiveSec=0s</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>Render</code> only rejects <code>Interval &lt;= 0</code> and then computes <code>int64(opts.Interval/time.Second)</code>, which truncates. <code>--interval 500ms</code> writes <code>OnUnitActiveSec=0s</code>, so the timer re-fires immediately after every run (a tight sync loop against the git remote), and <code>1500ms</code> silently becomes <code>1s</code>.</p>
+    <p><span class="label">✅ Fix:</span></p>
+    <pre><code>if opts.Interval &lt; time.Second || opts.Interval%time.Second != 0 {
+    return nil, nil, fmt.Errorf("%w: %s (must be whole seconds, at least 1s)", ErrInterval, opts.Interval)
+}
+</code></pre>
+    <p class="ref">📖 go/RULES.md#3 (input validation). Confirmed by a reproduction in a scratchpad copy: <code>TestRender_SubSecondInterval</code> printed <code>500ms timer line: "OnUnitActiveSec=0s"</code> and <code>1500ms ... "OnUnitActiveSec=1s"</code>.</p>
+  </div>
+
+  <h3 class="file"><code>app/layout/layout.go</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C5</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">app/layout/layout.go:112-146</span>
+      <span class="headline">Symlinks in the repository are followed; host files copied into the target</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> go-git's <code>Checkout{Force: true}</code> materialises committed symlinks as real symlinks. <code>walkInto</code> uses <code>filepath.WalkDir</code>, which reports a symlink with <code>d.IsDir() == false</code>, so the link is recorded in the tree as an ordinary file. <code>copyFile</code> (<code>app/sync/sync.go:715</code>, <code>os.ReadFile</code>) and <code>plan.readDesired</code> (<code>app/plan/plan.go:242</code>) then follow it. A repository entry such as <code>secrets.env -&gt; /etc/shadow</code> is read by robbe (root under the system timer), staged, written to <code>&lt;target&gt;/secrets.env</code> with mode 0644 and handed to containers via <code>EnvironmentFile=</code>. A symlink to a directory aborts the run with an unhelpful "is a directory" error. This breaks <code>README.md:36-37</code> ("Nothing outside that directory is touched") and the plan's "Files outside that subdirectory are never read". On its own this is not a privilege escalation, because anyone who can push to the repository already controls root containers through quadlet, but it removes the only read boundary robbe promises and turns any readable host file into a world-readable copy.</p>
+    <p><span class="label">✅ Fix:</span> Reject (or skip with a warning) symlinks in <code>walkInto</code> before the <code>d.IsDir()</code> branch, and add a symlink fixture test:</p>
+    <pre><code>if d.Type()&amp;fs.ModeSymlink != 0 {
+    return fmt.Errorf("%w: %s", ErrSymlink, path)
+}
+</code></pre>
+    <p>Defence in depth: also reject symlinks right after <code>wt.Clean</code> in <code>gogit.Sync</code>, and open copy sources through <code>os.OpenRoot(checkout.Dir)</code> so escaping links are refused by the OS.</p>
+    <p class="ref">📖 OWASP A01:2025 (path traversal / broken access control); go/RULES.md#11 (prefer <code>os.OpenRoot</code> when access must stay confined). Confirmed by running the scratchpad reproduction: <code>lstat mode: Lrwxrwxrwx</code>, <code>ReadFile via symlink: "rocinante\n"</code>.</p>
+    <p class="also">also: <code>adapters/gogit/source.go:59-67</code>, <code>app/sync/sync.go:303-307</code>, <code>app/sync/sync.go:715</code></p>
+  </div>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C6</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">app/layout/layout.go:172</span>
+      <span class="headline">Docs say hidden files are ignored; code applies them</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>docs/layout.md:57</code> lists "Hidden files and directories (names starting with <code>.</code>), including <code>.git/</code>." among the ignored entries. <code>isHousekeeping</code> only skips names starting with <code>.git</code> or <code>.robbe</code>, and <code>layout_test.go:37-38,53-54</code> asserts that <code>.hidden</code> and <code>.env</code> <em>are</em> in the tree. So <code>.env</code>, <code>.editorconfig</code>, <code>.github/</code> and similar land in the target as support files and trigger a restart of every workload. (The round-1 concern that a dot-named unit file would loop forever was refuted: podman 6.1.2's generator does process <code>.hidden.container</code>.) One of docs or code must change.</p>
+    <p><span class="label">✅ Fix:</span> Either skip all dot-prefixed names in <code>walkInto</code>:</p>
+    <pre><code>if strings.HasPrefix(d.Name(), ".") {
+    if d.IsDir() {
+        return filepath.SkipDir
+    }
+    return nil
+}
+</code></pre>
+    <p>or have a human change <code>docs/layout.md:57</code> to: "Git metadata (<code>.git/</code>, <code>.gitignore</code>, ...) and robbe housekeeping files (<code>.robbe-*</code>). Other dotfiles are applied as support files."</p>
+    <p class="ref">📖 General checklist 8 (docs contract). Confirmed by reading <code>layout.go:172</code>, <code>layout_test.go:37-54</code> and <code>docs/layout.md:25,57</code>.</p>
+  </div>
+
+  <h3 class="file"><code>app/marker/marker.go</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C7</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">app/marker/marker.go:61</span>
+      <span class="headline">Non-atomic marker write; a torn file makes every later run fail</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>Write</code> uses <code>os.WriteFile</code>, which truncates and then writes. A crash or power loss in between (on ext4 with delayed allocation a zero-length file after a crash is common) leaves an empty file; <code>Read</code> then returns <code>ErrMalformed</code> ("expected 2 lines, got 1"), <code>Syncer.Run</code> (<code>sync.go:116-119</code>) returns before doing anything, and every subsequent timer run fails until an operator deletes <code>&lt;state&gt;/applied</code>. For an unattended timer that is a permanent outage; it is the only piece of state in the design that does not self-heal.</p>
+    <p><span class="label">✅ Fix:</span> Write to a temp file in the same directory and rename (the pattern <code>installFile</code> in <code>sync.go</code> already uses), and treat a malformed marker as "nothing applied" with a warning:</p>
+    <pre><code>tmp, err := os.CreateTemp(filepath.Dir(path), ".applied-*")
+if err != nil {
+    return err
+}
+defer os.Remove(tmp.Name())
+if _, err := tmp.Write(data); err != nil {
+    _ = tmp.Close()
+    return err
+}
+if err := tmp.Sync(); err != nil {
+    _ = tmp.Close()
+    return err
+}
+if err := tmp.Close(); err != nil {
+    return err
+}
+return os.Rename(tmp.Name(), path)
+</code></pre>
+    <p class="ref">📖 go/RULES.md#3, #9; general checklist 6 (resource/state management). Confirmed by reading <code>marker.go:41-44,61</code> and <code>sync.go:116-119</code>.</p>
+  </div>
+
+  <h3 class="file"><code>app/status/status.go</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C8</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">app/status/status.go:48</span>
+      <span class="headline">robbe status mutates the shared clone without taking the sync lock</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>status.Get</code> calls <code>Source.Sync</code>, which fetches, force-checks-out and cleans the shared <code>&lt;cache&gt;/repo</code>. Only <code>Syncer.Run</code> takes the flock (<code>sync.go:101</code>). With the default 10 s timer, a concurrent <code>robbe status</code> is routine: it can reset the worktree to a different commit while the locked sync is walking, reading and copying it, so mixed-commit or torn files get staged, validated and written while the marker records the old commit; two go-git fetches also write into the same <code>.git</code> concurrently. <code>ports.Source.RemoteHead</code> (implemented with ls-remote, no worktree writes) exists but is unused.</p>
+    <p><span class="label">✅ Fix:</span> Move the flock helper out of <code>Syncer</code> into a small shared package (e.g. <code>app/lock</code>) and take it in <code>status.Get</code>; better still, have status use <code>RemoteHead</code> for the remote commit and compute drift from the current checkout under the lock, so status never touches the worktree:</p>
+    <pre><code>unlock, err := lock.Acquire(opts.Runtime)
+if err != nil {
+    return Status{}, err
+}
+defer unlock()
+
+remote, err := src.RemoteHead(ctx)
+// diff current checkout vs target under the lock; no src.Sync here
+</code></pre>
+    <p class="ref">📖 go/RULES.md#6 (shared state synchronisation); OWASP A10:2025 (exceptional conditions). Confirmed by reading <code>status.go:48</code>, <code>cmd/status.go:25</code>, <code>sync.go:101</code> and <code>adapters/gogit/source.go:59-67</code>.</p>
+  </div>
+
+  <h3 class="file"><code>app/sync/sync.go</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C9</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">app/sync/sync.go:114</span>
+      <span class="headline">Credentials embedded in repo.url reach the journal, stdout and errors</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> go-git's HTTP transport (<code>plumbing/transport/http/common.go:489-495</code>, <code>basicAuthFromEndpoint</code>) uses URL userinfo when no explicit auth is set, so <code>https://user:token@host/x.git</code> is a working configuration. robbe logs that URL verbatim on every run (<code>log.Info("fetched", zap.String("url", ...))</code>), prints it in the command header (<code>cmd/sync.go:104</code>) and embeds it in fetch, clone and parse errors (<code>adapters/gogit/source.go:107,150,180</code>). The journal is readable by root/adm in system scope and by the user in user scope. The documented path is <code>repo.auth.token</code>, so exposure needs an operator choice, but nothing rejects or redacts the userinfo.</p>
+    <p><span class="label">✅ Fix:</span> Redact once and use the safe form everywhere the URL is logged, printed or wrapped into an error:</p>
+    <pre><code>// redactURL strips the password from a git URL for logs and errors.
+func redactURL(raw string) string {
+    ep, err := transport.NewEndpoint(raw)
+    if err != nil {
+        return raw
+    }
+    ep.Password = ""
+    return ep.String()
+}
+</code></pre>
+    <p class="ref">📖 OWASP A09:2025 (logging of secrets); go/RULES.md#13. Confirmed by reading go-git <code>http/common.go:489</code> and the three call sites.</p>
+    <p class="also">also: <code>cmd/sync.go:104</code>, <code>adapters/gogit/source.go:107</code>, <code>adapters/gogit/source.go:150</code>, <code>adapters/gogit/source.go:180</code></p>
+  </div>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C10</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">app/sync/sync.go:454-467</span>
+      <span class="headline">Moved/renamed unit file is never removed from the target</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>plan.Diff</code> keys units by name, so moving <code>a/x.container</code> to <code>b/x.container</code> yields Remove = {<code>a/x.container</code> (unit <code>x.service</code>)}, Add = {<code>b/x.container</code>}, Stop = [] — exactly what <code>TestDiff_MovedFile</code> asserts. <code>writeFiles</code> skips removal of any entry whose unit is not in <code>stopped</code>, but <code>stopped</code> only ever holds units from <code>p.Stop</code>, so the old file is skipped on every run. The run returns nil, the marker is written, and the target now holds two files generating the same unit; the next validation of the target fails on the duplicate.</p>
+    <p><span class="label">✅ Fix:</span> Only defer removal for units the plan actually asked to stop, and add a sync-level moved-file test:</p>
+    <pre><code>mustBeDown := make(map[string]bool, len(p.Stop))
+for _, u := range p.Stop {
+    mustBeDown[u] = true
+}
+for _, f := range p.Remove {
+    if f.Unit != "" &amp;&amp; mustBeDown[f.Unit] &amp;&amp; !stopped[f.Unit] {
+        continue
+    }
+    // remove as before
+}
+</code></pre>
+    <p class="ref">📖 General checklist 3 (correctness), go/RULES.md#8 (tests). Confirmed by a reproduction in a scratchpad copy: <code>TestRun_MovedFileNotRemoved</code> — target after the second run was <code>map[a/x.container:... b/x.container:...]</code>, Stop length 0, err nil.</p>
+  </div>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C11</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">app/sync/sync.go:483-507</span>
+      <span class="headline">Lock file lives in a directory systemd deletes on every service stop</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> The flock is taken on <code>&lt;runtime&gt;/lock</code>, i.e. <code>/run/robbe/lock</code> or <code>$XDG_RUNTIME_DIR/robbe/lock</code>, and the service template declares <code>RuntimeDirectory=robbe</code> without <code>RuntimeDirectoryPreserve=</code>. systemd.exec(5) says: "If set to no (the default), the directories specified in RuntimeDirectory= are always removed when the service stops." Sequence: a manual <code>robbe sync</code> holds the flock on inode A; the timer fires, the service gets <code>ErrLocked</code>, exits 1 and stops; systemd removes <code>/run/robbe/</code>, unlinking A; the next tick recreates the directory, opens a fresh inode B, and the flock succeeds while the manual run is still working. <code>README.md:66-68</code> promises that a concurrent run exits with "another robbe run is in progress"; <code>deploy/systemd/README.md:27-30</code> documents the removal but not this consequence.</p>
+    <p><span class="label">✅ Fix:</span> Either keep the directory across stops in both the template and the reference unit:</p>
+    <pre><code>[Service]
+RuntimeDirectory=robbe
+RuntimeDirectoryPreserve=yes
+</code></pre>
+    <p>or move the lock file under <code>Opts.State</code> (or <code>Opts.Cache</code>), which systemd never removes on stop; flock does not care about stale files.</p>
+    <p class="ref">📖 go/RULES.md#6 (mutual exclusion); README contract. Confirmed by the systemd.exec(5) quote above and reading <code>sync.go:483-507</code> and the two unit files.</p>
+    <p class="also">also: <code>app/install/templates/robbe-sync.service:13</code>, <code>deploy/systemd/robbe-sync.service:13</code></p>
+  </div>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C12</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">app/sync/sync.go:613-635</span>
+      <span class="headline">Unclean target path defeats the prune guard; target and ancestors deleted</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>pruneEmptyDirs</code> stops climbing when <code>dir == target</code> by string equality. <code>dir</code> comes from <code>filepath.Dir(filepath.Join(...))</code> and is therefore cleaned, while <code>target</code> is the raw configured value (<code>target: /x/robbe/</code> with a trailing slash, <code>ROBBE_TARGET</code>, or a relative <code>./x</code>). Nothing in <code>config/</code>, <code>cmd/</code> or <code>app/sync</code> cleans <code>Target</code>. The guard then never matches: once the target becomes empty (last file removed, <code>--allow-empty</code>, or its only subdirectory removed) <code>os.Remove(target)</code> succeeds and the loop keeps removing empty ancestors such as <code>~/.config/containers/systemd</code> and <code>~/.config/containers</code>.</p>
+    <p><span class="label">✅ Fix:</span> Clean the target once and use the cleaned value everywhere, plus a test with a trailing-slash target:</p>
+    <pre><code>func removeFile(target, rel string) error {
+    target = filepath.Clean(target)
+    // unchanged
+}
+</code></pre>
+    <p>(or normalise <code>Opts.Target</code> once at the top of <code>Run</code>).</p>
+    <p class="ref">📖 go/RULES.md#11 (path handling); OWASP A10:2025. Confirmed by a reproduction in a scratchpad copy: <code>TestRemoveFile_TrailingSlashTargetPrunesAncestors</code> — after the call both <code>tmp/parent/robbe</code> and <code>tmp/parent</code> returned <code>ErrNotExist</code>.</p>
+  </div>
+
+  <h3 class="file"><code>config/config.go</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C13</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">config/config.go:106</span>
+      <span class="headline">os.UserHomeDir() fails under the system (root) unit; every command exits 1</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>configure()</code> calls <code>os.UserHomeDir()</code> unconditionally, before the root/user branch, and runs for every command via <code>cobra.OnInitialize(config.Init)</code> (<code>cmd/root.go:30</code>). The shipped service has no <code>User=</code> and no <code>Environment=HOME=</code>. systemd.exec(5): "$USER is set unconditionally, while $HOME, $LOGNAME, and $SHELL are only set for the units that have User= set and SetLoginEnvironment= unset or set to true." The Go docs for <code>os.UserHomeDir</code>: "On Unix, including macOS, it returns the $HOME environment variable. ... If the expected variable is not set in the environment, UserHomeDir returns either a platform-specific default value or a non-nil error." The root branch of <code>xdg.Defaults(app, false, home)</code> (<code>xdg.go:52-63</code>) never uses <code>home</code>. Result: the system-scope install documented in <code>deploy/systemd/README.md</code> ("System (root)") never syncs — every timer run dies before reading configuration.</p>
+    <p><span class="label">✅ Fix:</span> Only resolve the home directory when running as a user, and skip the user config-home search entry when there is none:</p>
+    <pre><code>user := os.Geteuid() != 0
+
+var home string
+if user {
+    var err error
+    home, err = os.UserHomeDir()
+    if err != nil {
+        return fmt.Errorf("home directory: %w", err)
+    }
+}
+
+paths := xdg.Defaults(appNameLowercase, user, home)
+// in searchDirs: skip xdg.ConfigHome(home) when home == "" (or use paths.Config)
+</code></pre>
+    <p>Optionally also set <code>Environment=HOME=/root</code> in the template as belt and braces. Add a <code>TestInit_NoHome</code> test.</p>
+    <p class="ref">📖 go/RULES.md#12 (environment coupling); OWASP A10:2025. Confirmed by a reproduction against the built binary: <code>env -i ./robbe version</code> printed <code>Error: home directory: $HOME is not defined</code> and exited 1; the same for <code>env -i ROBBE_REPO_URL=... ./robbe sync --dry-run</code> and <code>env -i HOME= ./robbe version</code>.</p>
+  </div>
+
+  <h3 class="file"><code>docs/configuration.md</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C14</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">docs/configuration.md:33-35</span>
+      <span class="headline">Docs say root ignores XDG variables; config search still honours them</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> The docs state: "When robbe runs as root (euid 0) the XDG variables are ignored and the system-wide directories are used". <code>config.searchDirs</code> (<code>config.go:138-152</code>) unconditionally prepends <code>xdg.ConfigHome(home)</code> and <code>xdg.ConfigDirs()</code>, so root with <code>XDG_CONFIG_HOME</code> set reads <code>$XDG_CONFIG_HOME/robbe/config.yaml</code> first (and <code>/root/.config/robbe/config.yaml</code> by default). Only the directory defaults in <code>xdg.go:52-63</code> ignore XDG.</p>
+    <p><span class="label">✅ Fix:</span> Either a human changes the sentence to "the XDG variables are ignored for the directory defaults; the config file search order above still applies", or the code gates the XDG entries of <code>searchDirs</code> on <code>user</code>:</p>
+    <pre><code>func searchDirs(app string, user bool, home string) []string {
+    if !user {
+        return []string{filepath.Join("/etc", app)}
+    }
+    // XDG_CONFIG_HOME, XDG_CONFIG_DIRS, /etc as before
+}
+</code></pre>
+    <p class="ref">📖 General checklist 8 (docs contract). Confirmed by reading <code>config.go:117,138-152</code> and <code>docs/configuration.md:33-35</code>.</p>
+  </div>
+
+  <h3 class="file"><code>docs/layout.md</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C15</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">docs/layout.md:50-51</span>
+      <span class="headline">Docs say an empty tree removes every managed file; code refuses</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> The docs say: "If neither <code>common/</code> nor <code>hosts/&lt;hostname&gt;/</code> exists the desired tree is empty and every managed file is removed." <code>app/sync/sync.go:215-217</code> returns <code>ErrEmptyTree</code> ("desired tree is empty; refusing to remove every managed unit (use --allow-empty)") unless <code>--allow-empty</code> is passed. <code>README.md:46</code> documents the flag correctly; <code>docs/layout.md</code> contradicts it.</p>
+    <p><span class="label">✅ Fix:</span> A human edits <code>docs/layout.md:50-51</code> to read: "... the desired tree is empty. If the target still holds managed files the run fails with <code>desired tree is empty; refusing to remove every managed unit</code>; pass <code>sync --allow-empty</code> to remove them."</p>
+    <pre><code>If neither `common/` nor `hosts/&lt;hostname&gt;/` exists the desired tree is empty.
+robbe then refuses to remove every managed file unless `sync --allow-empty` is given.
+</code></pre>
+    <p class="ref">📖 General checklist 8 (docs contract). Confirmed by reading <code>sync.go:38-40,215-217</code> and <code>README.md:46</code>.</p>
+  </div>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C16</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">docs/layout.md:61-63</span>
+      <span class="headline">Docs say .robbe-* files are cleaned; code removes only .robbe-tmp-*</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> The docs say <code>.robbe-*</code> files "are robbe's own temporary files ... cleaned up on the next run." <code>plan.readTarget</code> ignores every name with <code>HousekeepingPrefix</code> (<code>.robbe</code>, <code>plan.go:24</code>), while <code>removeStaleTemp</code> (<code>sync.go:652-672</code>) removes only <code>.robbe-tmp-*</code>. A leftover <code>&lt;target&gt;/.robbe-commit</code> from the committed pre-XDG state is therefore invisible to the planner and never cleaned. Low blast radius, but the documented behaviour does not happen.</p>
+    <p><span class="label">✅ Fix:</span> Narrow the ignore prefix so that stray files are treated as unmanaged content and removed as drift, or remove every <code>.robbe*</code> file in <code>removeStaleTemp</code>, or have a human fix the docs:</p>
+    <pre><code>// plan.go
+const HousekeepingPrefix = ".robbe-tmp-"
+</code></pre>
+    <p class="ref">📖 General checklist 8 (docs contract). Confirmed by reading <code>plan.go:24</code>, <code>sync.go:652-672</code> and <code>docs/layout.md:61-63</code>.</p>
+  </div>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C17</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">docs/layout.md:84,87</span>
+      <span class="headline">Restart table overclaims what robbe does</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> Row 84 says an added unit gets <code>systemctl start</code>; the code passes Start and Restart lists to a single <code>restart</code> call (<code>sync.go:408-418</code>) and <code>ports.UnitManager.Start</code> has no non-test caller. Row 87 says a support-file change causes <code>systemctl restart</code> "of every managed unit"; the code restarts only <code>.container</code> and <code>.pod</code> units (<code>quadlet/quadlet.go:34 IsWorkload</code>, <code>plan.go:125</code>), never <code>.network</code>, <code>.volume</code>, <code>.image</code> or <code>.build</code>. The plan label at <code>plan.go:193</code> ("(support file -&gt; restart all)") repeats the overclaim. <code>README.md:63</code> ("restart changed and start added units") is close enough.</p>
+    <p><span class="label">✅ Fix:</span> A human edits the two rows; the plan label can change in code:</p>
+    <pre><code>| added unit file      | `systemctl restart &lt;unit&gt;` (starts it when inactive)            |
+| support file changed | `systemctl restart` of every managed `.container` / `.pod` unit |
+</code></pre>
+    <pre><code>// plan.go:193
+"(support file -&gt; restart workloads)"
+</code></pre>
+    <p class="ref">📖 General checklist 8 (docs contract). Confirmed by reading <code>sync.go:408-418</code>, <code>plan.go:125,193</code>, <code>quadlet.go:34</code>.</p>
+  </div>
+
+  <h3 class="file"><code>go.mod</code></h3>
+
+  <div class="finding critical">
+    <div class="finding-head">
+      <span class="fid">C18</span>
+      <span class="badge critical">critical</span>
+      <span class="loc mono">go.mod:44</span>
+      <span class="headline">golang.org/x/crypto v0.53.0 has two reachable SSH client DoS CVEs</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> govulncheck (run successfully in round 2 via <code>go run golang.org/x/vuln/cmd/govulncheck@latest ./...</code> after the installed binary failed on the toolchain mismatch) reports GO-2026-6355 / CVE-2026-56855 (MEDIUM, deadlocked established channel) and GO-2026-6354 / CVE-2026-78662 (MEDIUM, deadlocked undecided channel) as reachable: <code>adapters/gogit/source.go:95:25: gogit.Source.fetch calls git.Repository.FetchContext, which eventually calls ssh.NewClientConn</code>. A malicious or compromised git server can therefore hang every ssh-based sync, and because nothing in robbe has a timeout (S7) the oneshot service hangs forever holding the lock. CVE-2026-56854 (HIGH, reported by trivy) only affects <code>NewServerConn</code> / <code>serverAuthenticate</code>, which go-git does not use, but the same bump fixes it.</p>
+    <p><span class="label">✅ Fix:</span></p>
+    <pre><code>go get golang.org/x/crypto@v0.56.0 &amp;&amp; go mod tidy</code></pre>
+    <p class="ref">📖 OWASP A03:2025 (vulnerable and outdated components). Confirmed by the govulncheck output above and <code>go mod why -m golang.org/x/crypto</code> (adapters/gogit → go-git/v5/plumbing/transport/ssh → x/crypto/ssh).</p>
+  </div>
+</section>
+
+<section id="style">
+  <h2>⚠️ Style &amp; Convention Issues</h2>
+  <p class="section-note">Should be fixed — violates language idioms or the applicable style guide.</p>
+
+  <h3 class="file"><code>.pre-commit-config.yaml</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S1</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">.pre-commit-config.yaml:50-53</span>
+      <span class="headline">Comment references a Taskfile and a pin-drift hook that do not exist</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> The comment says "The Taskfile's GOLANGCI_LINT_VERSION must match it, and the local <code>golangci-lint-pin-drift</code> hook below enforces that." There is no Taskfile and no such hook. The real second pin is <code>.github/actions/golangci-lint/action.yml:10</code> (<code>default: v2.13.1</code>), which matches after this bump but is not enforced. Reword to name the action file. The "Build the hook with the system Go toolchain" comment at lines 58-64 applies to all four hooks and should sit above <code>hooks:</code> rather than glued to <code>golangci-lint-fmt</code>.</p>
+    <p class="ref">📖 General checklist 2 (stale comments).</p>
+  </div>
+
+  <h3 class="file"><code>README.md</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S2</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">README.md:48</span>
+      <span class="headline">[--interval 5m] reads as the default; default is 10s, reference timer says 5min</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>cmd/install.go:16</code> sets <code>defaultInterval = 10 * time.Second</code> and <code>deploy/systemd/README.md:8-9</code> says 10s, but the README command table shows <code>robbe install [--interval 5m]</code> and the reference timer <code>deploy/systemd/robbe-sync.timer:6</code> has <code>OnUnitActiveSec=5min</code>. Write <code>[--interval &lt;duration&gt;]</code> with the default stated, and either align the reference timer or label it an example. (Human edit for README.)</p>
+    <p class="ref">📖 General checklist 2 (documentation consistency).</p>
+    <p class="also">also: <code>deploy/systemd/robbe-sync.timer:6</code></p>
+  </div>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S3</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">README.md:86-108</span>
+      <span class="headline">Project layout omits internal/; make lint also runs check-units</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> The layout tree lacks <code>internal/</code> (<code>xdg</code>, <code>testutil</code>, added in the worktree), and line 81 describes <code>make lint</code> as "golangci-lint" while <code>Makefile:23</code> makes <code>lint</code> depend on <code>check-units</code>. Add the <code>internal/</code> row and say "golangci-lint + unit-file drift check". (Human edit.)</p>
+    <p class="ref">📖 General checklist 2.</p>
+  </div>
+
+  <h3 class="file"><code>adapters/generator/validator.go</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S4</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">adapters/generator/validator.go:144</span>
+      <span class="headline">Dot-prefixed unit files exempt from the "no unit generated" check without reason</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>unitFilesWithoutUnit</code> skips names starting with <code>.</code>. The podman 6.1.2 generator on this host does process such files (a reproduction emitted <code>---.hidden.service---</code> for <code>.hidden.container</code>), so the exemption only hides a real generator rejection of a dot-named unit file. Drop the exemption, or add a comment explaining why it is there.</p>
+    <p class="ref">📖 go/RULES.md#3 (errors surface with context). Confirmed by running the generator in a scratchpad copy.</p>
+  </div>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S5</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">adapters/generator/validator.go:163,173</span>
+      <span class="headline">HasPrefix(rel, "..") misclassifies ..x.container as outside the directory</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> A file named <code>..x.container</code> yields <code>rel == "..x.container"</code>, which the prefix check flags as outside the staging directory and fails validation. Use <code>rel == ".." || strings.HasPrefix(rel, "../")</code> (after <code>filepath.ToSlash</code>) or <code>filepath.IsLocal(rel)</code>.</p>
+    <p class="ref">📖 go/RULES.md#11 (path handling).</p>
+  </div>
+
+  <h3 class="file"><code>app/sync/sync.go</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S6</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">app/sync/sync.go:493,504</span>
+      <span class="headline">syscall.Flock in new code; prefer golang.org/x/sys/unix</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> The <code>syscall</code> package docs say "most new code should prefer that package where possible" about <code>golang.org/x/sys</code>, which is already an indirect dependency. Use <code>unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB)</code>.</p>
+    <p class="ref">📖 go/RULES.md#5; <code>go doc syscall</code>.</p>
+  </div>
+
+  <h3 class="file"><code>cmd/root.go</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S7</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">cmd/root.go:23</span>
+      <span class="headline">No cancellation or timeout anywhere; oneshot service timeout disabled by default</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>rootCmd.Execute()</code> hands every command <code>context.Background()</code>; there is no <code>signal.NotifyContext</code>, no deadline, and the go-git ssh dial has no timeout. The service unit sets no <code>TimeoutStartSec=</code>, and systemd.service(5) says the default is "disabled by default" when <code>Type=oneshot</code> is used. A hung fetch (see the reachable DoS CVEs in C18) leaves the service activating forever, the timer never re-fires, the lock stays held and manual runs exit with <code>ErrLocked</code>. Fix: <code>rootCmd.ExecuteContext(signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM))</code>, a <code>timeout</code> config key applied with <code>context.WithTimeout</code> around <code>Run</code>, and <code>TimeoutStartSec=10min</code> in both the template and the reference unit.</p>
+    <p class="ref">📖 go/RULES.md#6, #10 (cancellation and timeouts propagated); systemd.service(5) TimeoutStartSec=.</p>
+    <p class="also">also: <code>app/install/templates/robbe-sync.service:8</code>, <code>deploy/systemd/robbe-sync.service:8</code>, <code>adapters/gogit/source.go:95,142</code></p>
+  </div>
+
+  <h3 class="file"><code>config/config.go</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S8</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">config/config.go:81</span>
+      <span class="headline">Garbled doc comment</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> "reports whether the application is running in a InDevelopmentEnvironment environment." Say what it checks: "reports whether DEVELOPMENT is set to a true value."</p>
+    <p class="ref">📖 go/RULES.md#2 (doc comments are complete sentences).</p>
+  </div>
+
+  <h3 class="file"><code>deploy/systemd/robbe-sync.timer</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S9</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">deploy/systemd/robbe-sync.timer:7</span>
+      <span class="headline">Persistent=true has no effect without OnCalendar=</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> systemd.timer(5) on <code>Persistent=</code>: "Note that this setting only has an effect on timers configured with OnCalendar=." The timer uses <code>OnBootSec</code>/<code>OnUnitActiveSec</code>, so the directive is dead and misleads readers into expecting missed-run catch-up. Remove it from both files; note that <code>make check-units</code> does not compare the timer, so the two copies can drift silently.</p>
+    <p class="ref">📖 systemd.timer(5) Persistent=.</p>
+    <p class="also">also: <code>app/install/templates/robbe-sync.timer:7</code></p>
+  </div>
+
+  <h3 class="file"><code>deploy/systemd/robbe-sync.service</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S10</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">deploy/systemd/robbe-sync.service:4-5</span>
+      <span class="headline">network-online.target does not exist in the user manager</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> systemd.special(7) lists <code>network-online.target</code> under system units only; in <code>--user</code> mode the <code>Wants=</code>/<code>After=</code> lines are a harmless no-op, but the unit implies a guarantee it cannot give rootless. Add a comment in the unit or a sentence in <code>deploy/systemd/README.md</code>'s rootless section.</p>
+    <p class="ref">📖 systemd.special(7).</p>
+    <p class="also">also: <code>app/install/templates/robbe-sync.service:4-5</code></p>
+  </div>
+
+  <h3 class="file"><code>go.mod</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S11</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">go.mod:20-21,44</span>
+      <span class="headline">Module not tidy</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>go mod tidy -diff</code> exits 1: <code>github.com/go-git/go-git/v5</code> is marked <code>// indirect</code> although <code>adapters/gogit</code> and <code>internal/testutil</code> import it directly, <code>google/go-cmp</code> and <code>rogpeppe/go-internal</code> are unused, and go.sum lacks some transitive entries. Build and vet still pass, so this is hygiene, not a break. Run <code>go mod tidy</code> and add <code>go mod tidy -diff</code> as a CI or pre-commit gate.</p>
+    <p class="ref">📖 OWASP A03:2025 (manifest hygiene); CICD-SEC-3.</p>
+  </div>
+
+  <h3 class="file"><code>internal/xdg/xdg.go</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S12</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">internal/xdg/xdg.go:33</span>
+      <span class="headline">Paths.Config is set but never read</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> <code>Paths.Config</code> is populated at <code>xdg.go:55,65</code> but <code>config.searchDirs</code> recomputes the config home itself. Use <code>paths.Config</code> in <code>searchDirs</code> (which also resolves the root/HOME coupling in C13) or drop the field.</p>
+    <p class="ref">📖 go/RULES.md#9 (unused data).</p>
+  </div>
+
+  <h3 class="file"><code>quadlet/quadlet.go</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S13</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">quadlet/quadlet.go:14-22</span>
+      <span class="headline">.artifact quadlet type unknown; treated as a support file</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> podman-systemd.unit(5) for podman 6.1.2 on this host says the generator "reads files with the extensions .container .volume, .network, .build, .pod, .kube, and .artifact". <code>.artifact</code> is missing from <code>unitSuffix</code>, so <code>IsUnitFile</code> returns false: the file is classified as a support file (every change restarts all workloads), its generated <code>&lt;name&gt;-artifact.service</code> is never started or stopped by robbe, and <code>unitFilesWithoutUnit</code> never validates it. Docs and code agree, so this is a functional gap rather than a contract break. Add <code>".artifact": "-artifact"</code> to <code>unitSuffix</code>, a <code>quadlet_test</code> case, and (human edit) <code>docs/layout.md:69</code>.</p>
+    <p class="ref">📖 podman-systemd.unit(5); general checklist 3.</p>
+  </div>
+
+  <h3 class="file"><code>telemetry/logger.go</code></h3>
+  <div class="finding style">
+    <div class="finding-head">
+      <span class="fid">S14</span>
+      <span class="badge style">style</span>
+      <span class="loc mono">telemetry/logger.go:6-12</span>
+      <span class="headline">Import grouping inconsistent with the rest of the module</span>
+    </div>
+    <p><span class="label">❌ Issue:</span> The internal <code>robbe/config</code> import sits in its own group before <code>zap</code>, while other files (e.g. <code>app/sync/sync.go:19-24</code>) group internal imports together with third-party ones. Pick one convention; goimports' default is stdlib / everything else.</p>
+    <p class="ref">📖 go/RULES.md#5 (import grouping).</p>
+  </div>
+</section>
+
+<section id="suggestions">
+  <h2>💡 Suggestions</h2>
+  <p class="section-note">Optional improvements — readability, performance, testability.</p>
+  <ul class="compact">
+    <li><code>adapters/gogit/source.go:63-64</code> — the comment "removing untracked files" overstates <code>Clean{Dir: true}</code>: ignored files survive; say "untracked, not ignored".</li>
+    <li><code>adapters/gogit/source.go:134-142</code> — a non-git leftover in <code>&lt;cache&gt;/repo</code> never self-heals (<code>PlainOpen</code> returns <code>ErrRepositoryNotExists</code>, then cloning into a non-empty directory fails on every run); <code>os.RemoveAll(dir)</code> in that branch.</li>
+    <li><code>adapters/gogit/source.go:188-212</code> — select auth by <code>ep.Protocol</code> first and reject a token over plain <code>http://</code> (cleartext).</li>
+    <li><code>adapters/osexec/runner.go:24-31</code> — set <code>cmd.WaitDelay = 5 * time.Second</code>; the os/exec docs warn that with a zero WaitDelay "I/O pipes will be read until EOF, which might not occur until orphaned subprocesses of the command have also closed their descriptors for the pipes".</li>
+    <li><code>adapters/systemctl/units.go:97</code> — pass <code>--</code> before unit names (a repo file <code>-tweb.container</code> yields <code>-tweb.service</code>, parsed as an option); fails closed today, cheap hardening. Also <code>app/install/install.go:171-174</code>.</li>
+    <li><code>adapters/generator/validator.go:53-61</code> — when <code>runErr != nil</code> and <code>parse</code> also fails, return <code>errors.Join(err, runErr)</code> so the generator's stderr survives.</li>
+    <li><code>app/sync/sync.go:206</code> — <code>removeStaleTemp</code> runs inside <code>computePlan</code>, so <code>--dry-run</code> deletes <code>.robbe-tmp-*</code> in the target while the help text (<code>cmd/sync.go:143</code>) and <code>README.md:25</code> say "change nothing"; move it to the start of <code>apply</code>.</li>
+    <li><code>app/sync/sync.go:114,156,181</code> and <code>cmd/sync.go:97</code> — roughly eight journal lines per 10 s tick at Info level; demote "fetched"/"no changes" to Debug and print the header only when something changed or on <code>--dry-run</code>.</li>
+    <li><code>app/sync/sync.go:165</code> — <code>upToDate</code> ignores content drift in the target (documented in <code>README.md:53-54</code>); consider a tree hash in the marker or a <code>--force</code> flag.</li>
+    <li><code>app/install/install.go:62</code> — the app layer reads the environment via <code>xdg.ConfigHome</code>; resolve <code>UnitDir</code> in <code>cmd/install</code> and pass it in (this also lets <code>install</code> honour the config <code>user</code> key).</li>
+    <li><code>app/install/templates/robbe-sync.service:9</code> — <code>ExecStart={{.Binary}} sync</code> is unquoted and unescaped; a path with a space or <code>%</code> breaks the unit (systemd.unit(5): "Use "%%" in place of "%" to specify a single percent sign"); render <code>ExecStart="{{escape .Binary}}" sync</code>.</li>
+    <li><code>app/install/templates/robbe-sync.service</code> [Service] — no hardening; add <code>NoNewPrivileges=true</code>, and for system scope <code>ProtectSystem=strict</code> + <code>ReadWritePaths=/etc/containers/systemd/robbe</code>, <code>PrivateTmp=yes</code> as a drop-in; also warn in <code>install</code> when <code>os.Executable()</code> is not root-owned before baking it into a root unit.</li>
+    <li><code>app/install/templates/robbe-sync.timer</code> — add <code>AccuracySec=1s</code> (systemd.timer(5): "Defaults to 1min", so a 10 s interval elapses 10–70 s late) and <code>RandomizedDelaySec=</code> for fleets.</li>
+    <li><code>cmd/root.go:25</code> — <code>ErrLocked</code> exits 1 like any error (<code>README.md:52</code> "1 on any error"), so a timer overlap shows as a failed service; exit 0 or use a distinct, documented code.</li>
+    <li><code>cmd/install.go:78</code> — install/uninstall decide the scope from <code>os.Geteuid()</code> and never call <code>config.Load</code>, so the config <code>user</code> key and <code>--config</code> are ignored for unit scope; document or honour it.</li>
+    <li><code>cmd/sync.go:104-111</code> — the header prints <code>commit   (applied: none)</code> on an early fetch failure; print it only after <code>res.Commit != ""</code> or on success.</li>
+    <li><code>deploy/systemd/README.md:20-25</code> — note the minimum systemd version for <code>StateDirectory=</code> mapping to <code>$XDG_STATE_HOME</code> in user units (older releases map it to <code>$XDG_CONFIG_HOME</code>).</li>
+    <li><code>docs/configuration.md:9</code> — "reads one YAML file, <code>config.yaml</code>": viper's <code>SetConfigName("config")</code> also picks up <code>config.yml</code>/<code>.json</code>/<code>.toml</code> and parses them as YAML; note it or use <code>SetConfigFile</code>.</li>
+    <li><code>docs/configuration.md:79-80</code> — root under systemd uses <code>/root/.ssh/known_hosts</code>; document seeding it (<code>ssh-keyscan</code>) since go-git fails closed on an unknown host.</li>
+    <li><code>README.md:16-21</code> and <code>deploy/systemd/README.md:38-42</code> — <code>cat &gt; config.yaml</code> takes its mode from the umask and the file may hold a token; use <code>(umask 077; cat &gt; ...)</code> or <code>install -m600</code>.</li>
+    <li><code>Makefile:30-32</code> — <code>check-units</code> compares only the service; add the timer (<code>sed 's#^OnUnitActiveSec=.*#OnUnitActiveSec={{.Interval}}#'</code>).</li>
+    <li><code>Makefile:21</code> — the host build lacks <code>CGO_ENABLED=0</code>, unlike the static Containerfile build.</li>
+    <li><code>.golangci.yml:107-111</code> — G301/G306 are excluded globally; prefer <code>//nolint:gosec</code> at the few unit-file call sites so future config or secret writes at 0644 are still flagged.</li>
+    <li><code>Containerfile</code> — trivy DS-0026 (LOW): no <code>HEALTHCHECK</code>; acceptable given the distroless runtime and AGENTS.md's ban on runtime tooling, and robbe is not shipped as a container.</li>
+    <li>tests — add cases for: a symlink fixture (layout), a moved unit file at sync level, a trailing-slash target, empty <code>is-active</code> output for a single unit, a sub-second interval, an empty/malformed marker, status-vs-sync locking, <code>--dry-run</code> leaving <code>.robbe-tmp-*</code> alone, and cmd wiring beyond <code>resolveRuntime</code>.</li>
+  </ul>
+</section>
+
+<section id="static-analysis">
+  <h2>🛠️ Static Analysis Output</h2>
+  <p class="section-note">Findings from the linters/analyzers that aren't already covered above. Findings already listed as C/S issues are referenced by ID only.</p>
+
+  <h3 class="file"><code>gofmt</code></h3>
+  <ul class="compact">
+    <li>clean — 0 files need formatting.</li>
+  </ul>
+
+  <h3 class="file"><code>go vet</code></h3>
+  <ul class="compact">
+    <li>clean.</li>
+  </ul>
+
+  <h3 class="file"><code>golangci-lint v2.13.1</code></h3>
+  <ul class="compact">
+    <li><code>golangci-lint config verify</code> exit 0; run with the project's <code>.golangci.yml</code> (<code>default: all</code>, gosec with G301/G306 excluded, staticcheck family included): 0 issues.</li>
+  </ul>
+
+  <h3 class="file"><code>trivy fs (vuln, misconfig, secret)</code></h3>
+  <ul class="compact">
+    <li><code>go.mod:44</code> — <span class="mono">CVE-2026-56855, CVE-2026-78662</span> reachable x/crypto/ssh client DoS: see C18.</li>
+    <li><code>go.mod:44</code> — <span class="mono">CVE-2026-56854</span> HIGH, server-side only (<code>NewServerConn</code>); not reachable from go-git's client path, fixed by the same bump (C18).</li>
+    <li><code>go.mod:44</code> — <span class="mono">GO-2026-5932</span> <code>x/crypto/openpgp</code> unmaintained: dropped, package not imported.</li>
+    <li><code>Containerfile</code> — <span class="mono">DS-0026</span> LOW, no HEALTHCHECK: accepted (see Suggestions).</li>
+    <li>Secret scan: none found.</li>
+  </ul>
+
+  <h3 class="file"><code>govulncheck</code></h3>
+  <ul class="compact">
+    <li>Installed binary failed: <code>This application uses version go1.26 of the source-processing packages but runs version go1.27 of 'go list'.</code> Re-run in round 2 via <code>go run golang.org/x/vuln/cmd/govulncheck@latest ./...</code> in a scratchpad copy succeeded: 2 reachable vulnerabilities (C18), 1 package-level only.</li>
+  </ul>
+
+  <h3 class="file"><code>go mod tidy -diff</code></h3>
+  <ul class="compact">
+    <li>exit 1 — see S11.</li>
+  </ul>
+
+  <h3 class="file"><code>staticcheck (standalone)</code></h3>
+  <ul class="compact">
+    <li>Failed: <code>-: internal error in importing "container/list" (cannot decode "container/list", export data version 4 is greater than maximum supported version 2); please report an issue (compile)</code> — binary built against an older Go than the go1.27 toolchain in use. The same checks ran inside golangci-lint (clean). Rebuild with <code>go install honnef.co/go/tools/cmd/staticcheck@latest</code>.</li>
+  </ul>
+
+  <p class="not-installed">Not installed: gosec (standalone; ran inside golangci-lint), semgrep, gitleaks, osv-scanner</p>
+</section>
+
+</main>
+<footer>
+  <p class="stats">
+    <span>62 files changed</span>
+    <span class="sep">·</span>
+    <span><span class="added">+8484</span> / <span class="removed">&minus;45</span> lines</span>
+    <span class="sep">·</span>
+    <span>16 review agents</span>
+    <span class="sep">·</span>
+    <span>~880k tokens</span>
+  </p>
+  <p>Generated by deepreview. Read-only review — no files under review were modified.</p>
+</footer>
+</body>
+</html>

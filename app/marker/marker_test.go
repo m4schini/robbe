@@ -28,7 +28,8 @@ func TestRead_Absent(t *testing.T) {
 func TestWriteRead_RoundTrip(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
+	// The state directory does not exist yet; Write must create it.
+	dir := filepath.Join(t.TempDir(), "state", "robbe")
 
 	now := time.Now()
 	want := Marker{Commit: "abc123", At: now}
@@ -53,6 +54,10 @@ func TestWriteRead_RoundTrip(t *testing.T) {
 
 	if got.At.Location() != time.UTC {
 		t.Errorf("at location = %s, want UTC", got.At.Location())
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, File)); err != nil {
+		t.Errorf("stat %s: %v, want the marker inside the created state dir", File, err)
 	}
 }
 

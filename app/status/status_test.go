@@ -27,6 +27,7 @@ func TestGet(t *testing.T) {
 	})
 
 	target := t.TempDir()
+	state := t.TempDir()
 	src := gogit.New(t.TempDir())
 
 	opts := Options{
@@ -35,6 +36,7 @@ func TestGet(t *testing.T) {
 		Auth:   noAuth,
 		Host:   "alpha",
 		Target: target,
+		State:  state,
 	}
 
 	st, err := Get(t.Context(), src, opts)
@@ -67,7 +69,7 @@ func TestGet(t *testing.T) {
 		t.Errorf("Drift.Start = %v, want [nginx.service]", st.Drift.Start)
 	}
 
-	if err := marker.Write(target, marker.Marker{Commit: st.Remote, At: time.Now()}); err != nil {
+	if err := marker.Write(state, marker.Marker{Commit: st.Remote, At: time.Now()}); err != nil {
 		t.Fatalf("marker.Write() error = %v", err)
 	}
 

@@ -58,6 +58,12 @@ repo/
 - `*.kube` files. robbe does not manage Kubernetes YAML units; they are
   reported as skipped.
 
+In the target directory, `.robbe-*` files are robbe's own temporary files
+(`.robbe-tmp-*`, left by an interrupted atomic write). They are never part of
+the managed tree and are cleaned up on the next run. Everything else in the
+target is quadlet content; the applied-commit marker lives in the state
+directory (see the `state` key in [configuration.md](configuration.md)).
+
 ## Unit and support files
 
 A file is a unit file when its extension is one of `.container`, `.pod`,

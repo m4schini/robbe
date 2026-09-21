@@ -61,7 +61,12 @@ type Options struct {
 	Host   string
 	Target string
 	Cache  string
-	User   bool
+	// State is the directory holding the applied-commit marker.
+	State string
+	// Runtime is the directory holding the lock file. The caller resolves
+	// it (XDG_RUNTIME_DIR, /run, or the cache fallback); it is never empty.
+	Runtime string
+	User    bool
 	// AllowEmpty permits a run that removes every managed file.
 	AllowEmpty bool
 }
@@ -108,7 +113,7 @@ func (s *Syncer) Run(ctx context.Context, dryRun bool) (Result, error) {
 
 	log.Info("fetched", zap.String("url", s.Opts.URL), zap.String("ref", s.Opts.Ref), zap.String("commit", co.Commit))
 
-	applied, err := marker.Read(s.Opts.Target)
+	applied, err := marker.Read(s.Opts.State)
 	if err != nil {
 		return Result{}, fmt.Errorf("marker: %w", err)
 	}
@@ -117,8 +122,12 @@ func (s *Syncer) Run(ctx context.Context, dryRun bool) (Result, error) {
 	res.Commit = co.Commit
 	res.Previous = applied.Commit
 
-	if applied.Commit == co.Commit {
-		log.Info("no changes", zap.String("commit", co.Commit))
+	upToDate, err := s.upToDate(applied.Commit, co.Commit)
+	if err != nil {
+		return Result{}, err
+	}
+
+	if upToDate {
 		res.UpToDate = true
 
 		return res, nil
@@ -140,13 +149,38 @@ func (s *Syncer) Run(ctx context.Context, dryRun bool) (Result, error) {
 
 	res.Applied = true
 
-	if err := marker.Write(s.Opts.Target, marker.Marker{Commit: co.Commit, At: s.now()}); err != nil {
+	if err := marker.Write(s.Opts.State, marker.Marker{Commit: co.Commit, At: s.now()}); err != nil {
 		return res, fmt.Errorf("marker: %w", err)
 	}
 
 	log.Info("applied", zap.String("commit", co.Commit))
 
 	return res, nil
+}
+
+// upToDate reports whether the run can stop: the marker already names the
+// fetched commit and the target directory still exists. A marker for the
+// fetched commit with a missing target (wiped by hand, fresh host with a
+// copied state dir) is re-applied.
+func (s *Syncer) upToDate(applied, fetched string) (bool, error) {
+	if applied != fetched {
+		return false, nil
+	}
+
+	targetExists, err := dirExists(s.Opts.Target)
+	if err != nil {
+		return false, fmt.Errorf("target: %w", err)
+	}
+
+	if !targetExists {
+		s.logger().Info("target missing, re-applying", zap.String("commit", fetched), zap.String("target", s.Opts.Target))
+
+		return false, nil
+	}
+
+	s.logger().Info("no changes", zap.String("commit", fetched))
+
+	return true, nil
 }
 
 // computePlan performs steps 3-5: layout, stage + validate, diff. It fills
@@ -443,14 +477,15 @@ func (s *Syncer) writeFiles(staging string, p plan.Plan, stopped map[string]bool
 	return nil
 }
 
-// lock takes an exclusive flock on <cache>/lock so a timer run and a manual
-// run cannot interleave.
+// lock takes an exclusive flock on <runtime>/lock so a timer run and a
+// manual run cannot interleave. The runtime directory is created when
+// missing (systemd creates it for timer runs, manual runs do it here).
 func (s *Syncer) lock() (func(), error) {
-	if err := os.MkdirAll(s.Opts.Cache, dirPerm); err != nil {
-		return nil, fmt.Errorf("create cache: %w", err)
+	if err := os.MkdirAll(s.Opts.Runtime, dirPerm); err != nil {
+		return nil, fmt.Errorf("create runtime dir: %w", err)
 	}
 
-	f, err := os.OpenFile(filepath.Join(s.Opts.Cache, lockFileName), os.O_CREATE|os.O_RDWR, filePerm)
+	f, err := os.OpenFile(filepath.Join(s.Opts.Runtime, lockFileName), os.O_CREATE|os.O_RDWR, filePerm)
 	if err != nil {
 		return nil, fmt.Errorf("open lock: %w", err)
 	}
@@ -597,6 +632,21 @@ func pruneEmptyDirs(target, dir string) {
 
 		dir = filepath.Dir(dir)
 	}
+}
+
+// dirExists reports whether path is an existing directory. A missing path
+// is not an error.
+func dirExists(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, fmt.Errorf("stat %s: %w", path, err)
+	}
+
+	return info.IsDir(), nil
 }
 
 // removeStaleTemp deletes temp files a crashed run left in target.

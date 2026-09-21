@@ -18,8 +18,9 @@ import (
 	"github.com/m4schini/robbe/quadlet"
 )
 
-// HousekeepingPrefix marks robbe's own files in the target (.robbe-commit,
-// .robbe-tmp-*); they are never part of the managed tree.
+// HousekeepingPrefix marks robbe's own temporary files in the target
+// (.robbe-tmp-*, from atomic writes); they are never part of the managed
+// tree. The applied-commit marker lives in the state directory, not here.
 const HousekeepingPrefix = ".robbe"
 
 // File is one entry of the plan. Unit is empty for support files (env

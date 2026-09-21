@@ -7,3 +7,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart={{.Binary}} sync
+ConfigurationDirectory=robbe
+CacheDirectory=robbe
+StateDirectory=robbe
+RuntimeDirectory=robbe

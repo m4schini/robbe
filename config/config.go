@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/m4schini/robbe/internal/xdg"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -25,10 +25,20 @@ const (
 	DefaultGenerator = "/usr/lib/systemd/system-generators/podman-system-generator"
 	// DefaultRef is the branch checked out when none is configured.
 	DefaultRef = "main"
+	// configName is the config file name without extension, looked up in
+	// every search directory as configName.yaml.
+	configName = "config"
+	// systemConfigRoot is the last search location, /etc/<app>, for hosts
+	// that do not use XDG_CONFIG_DIRS.
+	systemConfigRoot = "/etc"
 )
 
 // Version is the build version, set by main from -ldflags.
 var Version = "dev"
+
+// ConfigFile is the path given with --config. When set it replaces the
+// search path and must exist.
+var ConfigFile string
 
 // ErrRepoURLMissing is returned by Load when no repository URL is configured.
 var ErrRepoURLMissing = errors.New("repo.url is not configured")
@@ -57,6 +67,11 @@ type Config struct {
 	Target string `mapstructure:"target"`
 	// Cache holds the git clone and the staging directory.
 	Cache string `mapstructure:"cache"`
+	// State holds the applied-commit marker.
+	State string `mapstructure:"state"`
+	// Runtime holds the lock file. Empty when XDG_RUNTIME_DIR is unset for
+	// a non-root user; the caller then falls back to Cache.
+	Runtime string `mapstructure:"runtime"`
 	// Generator is the path of podman-system-generator.
 	Generator string `mapstructure:"generator"`
 	// User selects the systemd user scope (systemctl --user, generator -user).
@@ -79,34 +94,88 @@ func InDevelopmentEnvironment() bool {
 	return enabled
 }
 
-// Init configures viper: config file search paths, name, defaults and env lookup.
+// Init configures viper: config file search paths, name, defaults and env
+// lookup, then reads the config file. A missing file in the search path is
+// fine; a missing --config file or a malformed file is fatal.
 func Init() {
-	// Find home directory.
+	cobra.CheckErr(configure())
+}
+
+// configure is Init without the fatal exit, so tests can observe the error.
+func configure() error {
 	home, err := os.UserHomeDir()
-	cobra.CheckErr(err)
-
-	// Search config in home directory with name ".config" (without extension).
-	viper.AddConfigPath(home)
-	if runtime.GOOS == "linux" {
-		viper.AddConfigPath("/etc/" + appNameLowercase)
+	if err != nil {
+		return fmt.Errorf("home directory: %w", err)
 	}
-	viper.AddConfigPath(".")
-	viper.SetConfigType("yaml")
-	viper.SetConfigName("." + appNameLowercase)
 
-	setDefaults(home)
+	user := os.Geteuid() != 0
+	paths := xdg.Defaults(appNameLowercase, user, home)
+
+	if ConfigFile != "" {
+		viper.SetConfigFile(ConfigFile)
+	} else {
+		for _, dir := range searchDirs(home) {
+			viper.AddConfigPath(dir)
+		}
+
+		viper.SetConfigName(configName)
+	}
+
+	viper.SetConfigType("yaml")
+
+	setDefaults(paths, user)
 
 	viper.SetEnvPrefix(envPrefix)
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv() // read in environment variables that match
-	_ = viper.ReadInConfig()
+
+	return readConfig()
+}
+
+// searchDirs lists the directories searched for config.yaml, in order:
+// $XDG_CONFIG_HOME/<app>, <dir>/<app> for each $XDG_CONFIG_DIRS entry, and
+// /etc/<app>.
+func searchDirs(home string) []string {
+	configDirs := xdg.ConfigDirs()
+
+	roots := make([]string, 0, len(configDirs)+2) //nolint:mnd // ConfigHome in front, /etc at the end
+	roots = append(roots, xdg.ConfigHome(home))
+	roots = append(roots, configDirs...)
+	roots = append(roots, systemConfigRoot)
+
+	dirs := make([]string, 0, len(roots))
+	for _, root := range roots {
+		dirs = append(dirs, filepath.Join(root, appNameLowercase))
+	}
+
+	return dirs
+}
+
+// readConfig reads the config file. Not finding one in the search path is
+// not an error; any other failure (missing --config file, malformed YAML)
+// is reported so it cannot silently fall back to defaults.
+func readConfig() error {
+	err := viper.ReadInConfig()
+	if err == nil {
+		return nil
+	}
+
+	var notFound viper.ConfigFileNotFoundError
+	if ConfigFile == "" && errors.As(err, &notFound) {
+		return nil
+	}
+
+	name := viper.ConfigFileUsed()
+	if name == "" {
+		name = ConfigFile
+	}
+
+	return fmt.Errorf("read config %s: %w", name, err)
 }
 
 // setDefaults registers every key with viper. Keys without a real default
 // are registered as empty so that AutomaticEnv values reach Unmarshal.
-func setDefaults(home string) {
-	user := os.Geteuid() != 0
-
+func setDefaults(paths xdg.Paths, user bool) {
 	viper.SetDefault("repo.url", "")
 	viper.SetDefault("repo.ref", DefaultRef)
 	viper.SetDefault("repo.auth.ssh_key", "")
@@ -114,36 +183,14 @@ func setDefaults(home string) {
 	viper.SetDefault("repo.auth.token", "")
 	viper.SetDefault("repo.auth.username", "")
 	viper.SetDefault("host", "")
-	viper.SetDefault("target", defaultTarget(home, user))
-	viper.SetDefault("cache", defaultCache(home, user))
+	viper.SetDefault("target", paths.Target)
+	viper.SetDefault("cache", paths.Cache)
+	viper.SetDefault("state", paths.State)
+	// paths.Runtime is "" when XDG_RUNTIME_DIR is unset, which lets the
+	// caller detect "not configured" and apply its fallback.
+	viper.SetDefault("runtime", paths.Runtime)
 	viper.SetDefault("generator", DefaultGenerator)
 	viper.SetDefault("user", user)
-}
-
-func defaultTarget(home string, user bool) string {
-	if !user {
-		return "/etc/containers/systemd/" + appNameLowercase
-	}
-
-	base := os.Getenv("XDG_CONFIG_HOME")
-	if base == "" {
-		base = filepath.Join(home, ".config")
-	}
-
-	return filepath.Join(base, "containers", "systemd", appNameLowercase)
-}
-
-func defaultCache(home string, user bool) string {
-	if !user {
-		return "/var/cache/" + appNameLowercase
-	}
-
-	base := os.Getenv("XDG_CACHE_HOME")
-	if base == "" {
-		base = filepath.Join(home, ".cache")
-	}
-
-	return filepath.Join(base, appNameLowercase)
 }
 
 // Load unmarshals the viper state into a Config and validates it. Init must

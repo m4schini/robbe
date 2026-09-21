@@ -6,25 +6,52 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 )
 
-// resetViper clears the global viper state and points HOME and the working
-// directory at fresh temp directories so no real ~/.robbe.yaml,
-// /etc/robbe/.robbe.yaml or ./.robbe.yaml is picked up.
+const repoURL = "https://example.com/repo.git"
+
+// resetViper clears the global viper state and ConfigFile, points HOME and
+// the working directory at fresh temp directories and clears every XDG
+// variable, so no real config file is picked up. It returns the home dir.
 func resetViper(t *testing.T) string {
 	t.Helper()
 
 	viper.Reset()
 	t.Cleanup(viper.Reset)
 
+	ConfigFile = ""
+
+	t.Cleanup(func() { ConfigFile = "" })
+
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Chdir(t.TempDir())
 
+	for _, name := range []string{"XDG_CONFIG_HOME", "XDG_CONFIG_DIRS", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR"} {
+		t.Setenv(name, "")
+	}
+
 	return home
+}
+
+// writeConfig writes content to dir/config.yaml, creating dir.
+func writeConfig(t *testing.T, dir, content string) string {
+	t.Helper()
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", dir, err)
+	}
+
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+
+	return path
 }
 
 //nolint:paralleltest // uses the global viper instance via resetViper
@@ -45,9 +72,7 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 
 	home := resetViper(t)
-	t.Setenv("XDG_CONFIG_HOME", "")
-	t.Setenv("XDG_CACHE_HOME", "")
-	t.Setenv("ROBBE_REPO_URL", "https://example.com/repo.git")
+	t.Setenv("ROBBE_REPO_URL", repoURL)
 
 	Init()
 
@@ -74,6 +99,15 @@ func TestLoad_Defaults(t *testing.T) {
 		t.Errorf("Cache = %q, want %q", cfg.Cache, wantCache)
 	}
 
+	wantState := filepath.Join(home, ".local", "state", "robbe")
+	if cfg.State != wantState {
+		t.Errorf("State = %q, want %q", cfg.State, wantState)
+	}
+
+	if cfg.Runtime != "" {
+		t.Errorf("Runtime = %q, want empty (XDG_RUNTIME_DIR unset)", cfg.Runtime)
+	}
+
 	if cfg.Generator != DefaultGenerator {
 		t.Errorf("Generator = %q, want %q", cfg.Generator, DefaultGenerator)
 	}
@@ -89,13 +123,21 @@ func TestLoad_Defaults(t *testing.T) {
 }
 
 func TestLoad_XDG(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("test assumes a non-root user")
+	}
+
 	resetViper(t)
 
 	xdgConfig := t.TempDir()
 	xdgCache := t.TempDir()
+	xdgState := t.TempDir()
+	xdgRuntime := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdgConfig)
 	t.Setenv("XDG_CACHE_HOME", xdgCache)
-	t.Setenv("ROBBE_REPO_URL", "https://example.com/repo.git")
+	t.Setenv("XDG_STATE_HOME", xdgState)
+	t.Setenv("XDG_RUNTIME_DIR", xdgRuntime)
+	t.Setenv("ROBBE_REPO_URL", repoURL)
 
 	Init()
 
@@ -113,6 +155,16 @@ func TestLoad_XDG(t *testing.T) {
 	if cfg.Cache != wantCache {
 		t.Errorf("Cache = %q, want %q", cfg.Cache, wantCache)
 	}
+
+	wantState := filepath.Join(xdgState, "robbe")
+	if cfg.State != wantState {
+		t.Errorf("State = %q, want %q", cfg.State, wantState)
+	}
+
+	wantRuntime := filepath.Join(xdgRuntime, "robbe")
+	if cfg.Runtime != wantRuntime {
+		t.Errorf("Runtime = %q, want %q", cfg.Runtime, wantRuntime)
+	}
 }
 
 func TestLoad_EnvOverride(t *testing.T) {
@@ -127,6 +179,8 @@ func TestLoad_EnvOverride(t *testing.T) {
 	t.Setenv("ROBBE_HOST", "alpha")
 	t.Setenv("ROBBE_TARGET", "/t")
 	t.Setenv("ROBBE_CACHE", "/c")
+	t.Setenv("ROBBE_STATE", "/s")
+	t.Setenv("ROBBE_RUNTIME", "/r")
 	t.Setenv("ROBBE_GENERATOR", "/g")
 	t.Setenv("ROBBE_USER", "false")
 
@@ -151,6 +205,8 @@ func TestLoad_EnvOverride(t *testing.T) {
 		Host:      "alpha",
 		Target:    "/t",
 		Cache:     "/c",
+		State:     "/s",
+		Runtime:   "/r",
 		Generator: "/g",
 		User:      false,
 	}
@@ -171,12 +227,11 @@ repo:
     ssh_key: /home/user/.ssh/id_ed25519
 host: alpha
 target: /custom/target
+state: /custom/state
+runtime: /custom/runtime
 `
 
-	path := filepath.Join(home, ".robbe.yaml")
-	if err := os.WriteFile(path, []byte(yamlContent), 0o600); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
+	writeConfig(t, filepath.Join(home, ".config", "robbe"), yamlContent)
 
 	Init()
 
@@ -205,6 +260,14 @@ target: /custom/target
 		t.Errorf("Target = %q, want %q", cfg.Target, "/custom/target")
 	}
 
+	if cfg.State != "/custom/state" {
+		t.Errorf("State = %q, want %q", cfg.State, "/custom/state")
+	}
+
+	if cfg.Runtime != "/custom/runtime" {
+		t.Errorf("Runtime = %q, want %q", cfg.Runtime, "/custom/runtime")
+	}
+
 	t.Setenv("ROBBE_REPO_REF", "override")
 
 	cfg2, err := Load()
@@ -214,5 +277,132 @@ target: /custom/target
 
 	if cfg2.Repo.Ref != "override" {
 		t.Errorf("Repo.Ref = %q, want %q (env override)", cfg2.Repo.Ref, "override")
+	}
+}
+
+func TestInit_ConfigHomeWinsOverConfigDirs(t *testing.T) {
+	resetViper(t)
+
+	xdgConfig := t.TempDir()
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgConfig)
+	t.Setenv("XDG_CONFIG_DIRS", xdgDir)
+
+	writeConfig(t, filepath.Join(xdgConfig, "robbe"), "repo:\n  url: https://example.com/home.git\n")
+	writeConfig(t, filepath.Join(xdgDir, "robbe"), "repo:\n  url: https://example.com/dirs.git\n")
+
+	Init()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Repo.URL != "https://example.com/home.git" {
+		t.Errorf("Repo.URL = %q, want the XDG_CONFIG_HOME file to win", cfg.Repo.URL)
+	}
+}
+
+func TestInit_ConfigDirs(t *testing.T) {
+	resetViper(t)
+
+	first := t.TempDir()
+	second := t.TempDir()
+	t.Setenv("XDG_CONFIG_DIRS", first+":"+second)
+
+	// Only the second entry holds a file; the first is searched and skipped.
+	writeConfig(t, filepath.Join(second, "robbe"), "repo:\n  url: "+repoURL+"\n")
+
+	Init()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Repo.URL != repoURL {
+		t.Errorf("Repo.URL = %q, want %q (from XDG_CONFIG_DIRS)", cfg.Repo.URL, repoURL)
+	}
+}
+
+//nolint:paralleltest // uses the global viper instance via resetViper
+func TestInit_LegacyDotfileIgnored(t *testing.T) {
+	home := resetViper(t)
+
+	const legacy = "repo:\n  url: " + repoURL + "\n"
+
+	for _, path := range []string{filepath.Join(home, ".robbe.yaml"), ".robbe.yaml"} {
+		if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	Init()
+
+	_, err := Load()
+	if !errors.Is(err, ErrRepoURLMissing) {
+		t.Fatalf("Load() error = %v, want ErrRepoURLMissing (legacy dotfiles must not be read)", err)
+	}
+}
+
+//nolint:paralleltest // uses the global viper instance via resetViper
+func TestInit_ConfigFlag(t *testing.T) {
+	home := resetViper(t)
+
+	// A file in the search path that must lose against --config.
+	writeConfig(t, filepath.Join(home, ".config", "robbe"), "repo:\n  url: https://example.com/search.git\n")
+
+	explicit := filepath.Join(t.TempDir(), "elsewhere.yaml")
+	if err := os.WriteFile(explicit, []byte("repo:\n  url: https://example.com/flag.git\n"), 0o600); err != nil {
+		t.Fatalf("write %s: %v", explicit, err)
+	}
+
+	ConfigFile = explicit
+
+	Init()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Repo.URL != "https://example.com/flag.git" {
+		t.Errorf("Repo.URL = %q, want the --config file to win", cfg.Repo.URL)
+	}
+}
+
+//nolint:paralleltest // uses the global viper instance via resetViper
+func TestInit_ConfigFlagMissing(t *testing.T) {
+	resetViper(t)
+
+	ConfigFile = filepath.Join(t.TempDir(), "nope.yaml")
+
+	err := configure()
+	if err == nil {
+		t.Fatal("configure() error = nil, want error for a missing --config file")
+	}
+
+	if !strings.Contains(err.Error(), "read config "+ConfigFile) {
+		t.Errorf("configure() error = %q, want to name %s", err, ConfigFile)
+	}
+
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("configure() error = %v, want to wrap os.ErrNotExist", err)
+	}
+}
+
+//nolint:paralleltest // uses the global viper instance via resetViper
+func TestInit_MalformedYAML(t *testing.T) {
+	home := resetViper(t)
+
+	path := writeConfig(t, filepath.Join(home, ".config", "robbe"), "key: [\n")
+
+	err := configure()
+	if err == nil {
+		t.Fatal("configure() error = nil, want error for malformed YAML in the search path")
+	}
+
+	if !strings.Contains(err.Error(), "read config "+path) {
+		t.Errorf("configure() error = %q, want to name %s", err, path)
 	}
 }
