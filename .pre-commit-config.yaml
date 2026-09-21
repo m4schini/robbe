@@ -55,10 +55,15 @@ repos:
   - repo: https://github.com/golangci/golangci-lint
     rev: v2.13.1
     hooks:
+      # Build the hook with the system Go toolchain (the one go.mod is
+      # developed against) rather than the Go that pre-commit downloads: a
+      # golangci-lint built with a different patch release than the stdlib
+      # it type-checks panics on newer language features.
       # Formats the repository in place. When it rewrites a file the commit
       # fails and you re-stage: pre-commit never quietly commits bytes you did
       # not look at.
       - id: golangci-lint-fmt
+        language_version: system
         stages: [pre-commit]
 
       # Diff-scoped linting. Upstream's entry is already
@@ -69,15 +74,18 @@ repos:
       # issues on the lines the commit touched, and a change that breaks a
       # function twenty lines below the edit passes the hook and fails CI.
       - id: golangci-lint
+        language_version: system
         args: [--whole-files]
         stages: [pre-commit]
 
       # Config schema validation. Upstream's `files:` already scopes this to
       # .golangci.{yml,yaml,toml,json}.
       - id: golangci-lint-config-verify
+        language_version: system
         stages: [pre-commit]
 
       - id: golangci-lint-full
+        language_version: system
         stages: [pre-push]
 
   - repo: local

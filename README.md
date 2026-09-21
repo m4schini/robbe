@@ -13,8 +13,9 @@ daemon, no Kubernetes.
 # build
 make build                      # -> bin/robbe
 
-# configure (see docs/configuration.md for every key)
-cat > ~/.robbe.yaml <<YAML
+# configure (see docs/configuration.md for every key and --config)
+install -d ~/.config/robbe
+cat > ~/.config/robbe/config.yaml <<YAML
 repo:
   url: git@github.com:me/infra.git
   ref: main
@@ -33,7 +34,8 @@ loginctl enable-linger "$USER"  # rootless only: keep the timer running without 
 
 Quadlet files land in `~/.config/containers/systemd/robbe/` (rootless) or
 `/etc/containers/systemd/robbe/` (root). Nothing outside that directory is
-touched.
+touched. Every command accepts `--config <path>` to bypass the config file
+search.
 
 ## Commands
 
@@ -49,17 +51,21 @@ touched.
 
 Exit status is 0 on success or when nothing changed, 1 on any error.
 `sync` skips all work when the fetched commit equals the one recorded in
-`<target>/.robbe-commit`.
+`<state>/applied` and the target directory still exists.
 
 ## How a sync works
 
 1. Clone or fetch the repository into the cache (`go-git`, no `git` binary needed) and check out `ref`.
-2. Compare the commit with `<target>/.robbe-commit`; exit if equal.
+2. Compare the commit with `<state>/applied`; exit if equal and the target directory exists. A wiped target is re-applied even when the marker matches.
 3. Resolve the desired tree: `common/` overlaid by `hosts/<hostname>/`, or the repository root (see [docs/layout.md](docs/layout.md)).
 4. Stage the tree and run `podman-system-generator --dryrun` over it. Invalid quadlets abort the run before the target is touched.
 5. Diff staging against the target: files to add, change, remove; units to start, restart, stop.
 6. Stop removed units, delete their files, write added and changed files, `daemon-reload`, restart changed and start added units in one systemd transaction, verify with `is-active`.
-7. Record the commit in `.robbe-commit` when every unit action succeeded.
+7. Record the commit in `<state>/applied` when every unit action succeeded.
+
+The whole run holds a lock on `<runtime>/lock` (`$XDG_RUNTIME_DIR/robbe/lock`
+rootless, `/run/robbe/lock` root); a concurrent run exits with
+`another robbe run is in progress`.
 
 ## Documentation
 
