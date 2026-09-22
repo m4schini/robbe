@@ -14,13 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m4schini/robbe/adapters"
 	"github.com/m4schini/robbe/adapters/generator"
 	"github.com/m4schini/robbe/adapters/gogit"
 	"github.com/m4schini/robbe/adapters/systemctl"
 	"github.com/m4schini/robbe/app/lock"
 	"github.com/m4schini/robbe/app/marker"
 	"github.com/m4schini/robbe/internal/testutil"
-	"github.com/m4schini/robbe/ports"
 	"github.com/m4schini/robbe/quadlet"
 )
 
@@ -198,7 +198,7 @@ func newHarness(t *testing.T) *harness {
 	state := filepath.Join(t.TempDir(), "robbe")
 	runtime := filepath.Join(t.TempDir(), "robbe")
 
-	var noAuth ports.Auth
+	var noAuth adapters.Auth
 
 	syncer := &Syncer{
 		Source:    gogit.New(cache),

@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m4schini/robbe/adapters"
 	"github.com/m4schini/robbe/adapters/gogit"
 	"github.com/m4schini/robbe/app/lock"
 	"github.com/m4schini/robbe/app/marker"
 	"github.com/m4schini/robbe/internal/testutil"
-	"github.com/m4schini/robbe/ports"
 )
 
-// noAuth is the zero-value ports.Auth; a bare ports.Auth{} composite literal
+// noAuth is the zero-value adapters.Auth; a bare adapters.Auth{} composite literal
 // trips exhaustruct_v5.
-var noAuth ports.Auth
+var noAuth adapters.Auth
 
 func TestGet(t *testing.T) {
 	t.Parallel()

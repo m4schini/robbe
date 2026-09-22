@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: TODO
 
-// Package gogit implements ports.Source with go-git.
+// Package gogit implements adapters.Source with go-git.
 package gogit
 
 import (
@@ -16,7 +16,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
-	"github.com/m4schini/robbe/ports"
+	"github.com/m4schini/robbe/adapters"
+	"github.com/m4schini/robbe/internal/redact"
 )
 
 const (
@@ -33,7 +34,7 @@ var ErrRefNotFound = errors.New("ref not found on remote")
 // transport that does not protect it, such as plain http.
 var ErrInsecureTransport = errors.New("insecure transport")
 
-// Source keeps a clone below cache and implements ports.Source.
+// Source keeps a clone below cache and implements adapters.Source.
 type Source struct {
 	cache string
 }
@@ -48,33 +49,33 @@ func (s *Source) RepoDir() string {
 	return filepath.Join(s.cache, repoDirName)
 }
 
-// Sync implements ports.Source.
-func (s *Source) Sync(ctx context.Context, url, ref string, auth ports.Auth) (ports.Checkout, error) {
+// Sync implements adapters.Source.
+func (s *Source) Sync(ctx context.Context, url, ref string, auth adapters.Auth) (adapters.Checkout, error) {
 	repo, hash, err := s.fetch(ctx, url, ref, auth)
 	if err != nil {
-		return ports.Checkout{}, err
+		return adapters.Checkout{}, err
 	}
 
 	wt, err := repo.Worktree()
 	if err != nil {
-		return ports.Checkout{}, fmt.Errorf("worktree: %w", err)
+		return adapters.Checkout{}, fmt.Errorf("worktree: %w", err)
 	}
 
 	if err := wt.Checkout(&git.CheckoutOptions{Hash: hash, Force: true}); err != nil {
-		return ports.Checkout{}, fmt.Errorf("checkout %s: %w", hash, err)
+		return adapters.Checkout{}, fmt.Errorf("checkout %s: %w", hash, err)
 	}
 
 	// Force checkout resets tracked files; Clean drops leftovers from
 	// previous checkouts so the layout walk only sees committed files.
 	if err := wt.Clean(&git.CleanOptions{Dir: true}); err != nil {
-		return ports.Checkout{}, fmt.Errorf("clean worktree: %w", err)
+		return adapters.Checkout{}, fmt.Errorf("clean worktree: %w", err)
 	}
 
-	return ports.Checkout{Dir: s.RepoDir(), Commit: hash.String()}, nil
+	return adapters.Checkout{Dir: s.RepoDir(), Commit: hash.String()}, nil
 }
 
-// RemoteHead implements ports.Source.
-func (s *Source) RemoteHead(ctx context.Context, url, ref string, auth ports.Auth) (string, error) {
+// RemoteHead implements adapters.Source.
+func (s *Source) RemoteHead(ctx context.Context, url, ref string, auth adapters.Auth) (string, error) {
 	_, hash, err := s.fetch(ctx, url, ref, auth)
 	if err != nil {
 		return "", err
@@ -85,7 +86,7 @@ func (s *Source) RemoteHead(ctx context.Context, url, ref string, auth ports.Aut
 
 // fetch opens or clones the repository, fetches all branches and tags and
 // resolves ref to a commit hash.
-func (s *Source) fetch(ctx context.Context, url, ref string, auth ports.Auth) (*git.Repository, plumbing.Hash, error) {
+func (s *Source) fetch(ctx context.Context, url, ref string, auth adapters.Auth) (*git.Repository, plumbing.Hash, error) {
 	method, err := authMethod(url, auth)
 	if err != nil {
 		return nil, plumbing.ZeroHash, err
@@ -108,7 +109,7 @@ func (s *Source) fetch(ctx context.Context, url, ref string, auth ports.Auth) (*
 		Tags:  git.NoTags,
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return nil, plumbing.ZeroHash, fmt.Errorf("fetch %s: %w", ports.RedactURL(url), err)
+		return nil, plumbing.ZeroHash, fmt.Errorf("fetch %s: %w", redact.URL(url), err)
 	}
 
 	hash, err := resolve(repo, ref)
@@ -151,7 +152,7 @@ func (s *Source) open(ctx context.Context, url string, method transport.AuthMeth
 		Tags:       git.NoTags,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("clone %s: %w", ports.RedactURL(url), err)
+		return nil, fmt.Errorf("clone %s: %w", redact.URL(url), err)
 	}
 
 	return repo, nil
@@ -180,10 +181,10 @@ func resolve(repo *git.Repository, ref string) (plumbing.Hash, error) {
 // docs/configuration.md: an ssh key file when configured, the ssh agent for
 // ssh urls, basic auth when a token is set, else none. A token is never sent
 // over plain http; that returns ErrInsecureTransport.
-func authMethod(url string, auth ports.Auth) (transport.AuthMethod, error) {
+func authMethod(url string, auth adapters.Auth) (transport.AuthMethod, error) {
 	ep, err := transport.NewEndpoint(url)
 	if err != nil {
-		return nil, fmt.Errorf("parse url %q: %w", ports.RedactURL(url), err)
+		return nil, fmt.Errorf("parse url %q: %w", redact.URL(url), err)
 	}
 
 	user := ep.User
@@ -215,7 +216,7 @@ func authMethod(url string, auth ports.Auth) (transport.AuthMethod, error) {
 
 // tokenAuth builds basic auth from auth.Token, refusing plain http so the
 // token is never sent in cleartext.
-func tokenAuth(ep *transport.Endpoint, auth ports.Auth) (transport.AuthMethod, error) {
+func tokenAuth(ep *transport.Endpoint, auth adapters.Auth) (transport.AuthMethod, error) {
 	if ep.Protocol == "http" {
 		return nil, fmt.Errorf("%w: token auth over plain http", ErrInsecureTransport)
 	}

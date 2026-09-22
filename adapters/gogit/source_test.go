@@ -12,13 +12,13 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
+	"github.com/m4schini/robbe/adapters"
 	"github.com/m4schini/robbe/internal/testutil"
-	"github.com/m4schini/robbe/ports"
 )
 
-// noAuth is the zero-value ports.Auth used wherever no credentials are
-// needed; a bare ports.Auth{} composite literal trips exhaustruct_v5.
-var noAuth ports.Auth
+// noAuth is the zero-value adapters.Auth used wherever no credentials are
+// needed; a bare adapters.Auth{} composite literal trips exhaustruct_v5.
+var noAuth adapters.Auth
 
 // assertFileContent fails the test unless the file at path exists and holds want.
 func assertFileContent(tb testing.TB, path, want string) {
@@ -228,13 +228,13 @@ func TestAuthMethod(t *testing.T) {
 	tests := []struct {
 		name string
 		url  string
-		auth ports.Auth
+		auth adapters.Auth
 		want func(tb testing.TB, method transport.AuthMethod, err error)
 	}{
 		{
 			name: "https token",
 			url:  "https://github.com/me/x.git",
-			auth: ports.Auth{SSHKey: "", SSHKeyPassword: "", Token: "tok", Username: ""},
+			auth: adapters.Auth{SSHKey: "", SSHKeyPassword: "", Token: "tok", Username: ""},
 			want: func(tb testing.TB, method transport.AuthMethod, err error) {
 				tb.Helper()
 
@@ -255,7 +255,7 @@ func TestAuthMethod(t *testing.T) {
 		{
 			name: "https token with username",
 			url:  "https://github.com/me/x.git",
-			auth: ports.Auth{SSHKey: "", SSHKeyPassword: "", Token: "tok", Username: "me"},
+			auth: adapters.Auth{SSHKey: "", SSHKeyPassword: "", Token: "tok", Username: "me"},
 			want: func(tb testing.TB, method transport.AuthMethod, err error) {
 				tb.Helper()
 
@@ -292,7 +292,7 @@ func TestAuthMethod(t *testing.T) {
 		{
 			name: "token over plain http",
 			url:  "http://example.com/me/x.git",
-			auth: ports.Auth{SSHKey: "", SSHKeyPassword: "", Token: "tok", Username: ""},
+			auth: adapters.Auth{SSHKey: "", SSHKeyPassword: "", Token: "tok", Username: ""},
 			want: func(tb testing.TB, method transport.AuthMethod, err error) {
 				tb.Helper()
 
@@ -308,7 +308,7 @@ func TestAuthMethod(t *testing.T) {
 		{
 			name: "token with ssh url prefers agent",
 			url:  "git@github.com:me/x.git",
-			auth: ports.Auth{SSHKey: "", SSHKeyPassword: "", Token: "tok", Username: ""},
+			auth: adapters.Auth{SSHKey: "", SSHKeyPassword: "", Token: "tok", Username: ""},
 			want: func(tb testing.TB, method transport.AuthMethod, err error) {
 				tb.Helper()
 
@@ -330,7 +330,7 @@ func TestAuthMethod(t *testing.T) {
 		{
 			name: "nonexistent ssh key",
 			url:  "https://github.com/me/x.git",
-			auth: ports.Auth{SSHKey: "/nonexistent", SSHKeyPassword: "", Token: "", Username: ""},
+			auth: adapters.Auth{SSHKey: "/nonexistent", SSHKeyPassword: "", Token: "", Username: ""},
 			want: func(tb testing.TB, method transport.AuthMethod, err error) {
 				tb.Helper()
 

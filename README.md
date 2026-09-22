@@ -83,27 +83,4 @@ make lint               # golangci-lint
 
 ## Project layout
 
-```
-.
-├── .github/    GitHub configuration: composite actions (.github/actions),
-│               the ci and pr-title workflows, and the branch ruleset that
-│               declares which checks are required to merge.
-│
-├── adapters/   Hexagonal architecture: adapters (go-git, generator,
-├── app/        systemctl, os/exec), app (layout, plan, sync, status,
-├── ports/      install) and the ports they meet at.
-├── quadlet/    Quadlet naming rules shared by app and adapters.
-│
-├── cmd/        Cobra command implementations. Holds the root command and
-│               its subcommands; main.go only calls cmd.Execute().
-├── config/     Viper-based configuration loading and the application's
-│               default values
-├── telemetry/  Telemetry package, holds logger.
-│
-├── deploy/     Deployment files (systemd service and timer units)
-├── hack/       Developer and CI tooling that is not part of the shipped
-│               binary. hooks/ holds the Conventional Commits validator
-│               shared by the local commit-msg hook and the pr-title
-│               workflow.
-└── docs/       Documentation for humans.
-```
+See the "Directory structure" section in [AGENTS.md](AGENTS.md).

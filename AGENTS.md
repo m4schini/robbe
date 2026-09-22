@@ -12,11 +12,43 @@ Guidance for AI coding agents working in this repository. `CLAUDE.md` is a symli
 
 ## Directory structure
 
-| Path | Purpose |
-| --- | --- |
-| `docs/` | Any documentation. |
-| `docs/agents/` | Documentation and similar written output produced by AI agents and assistants — notes, memory, plans, research reports, analyses. |
-| `hack/` | Developer tooling: scripts, generators, and anything else that is not compiled into the application itself. |
+```
+.
+├── .github/    GitHub configuration: composite actions (.github/actions),
+│               the ci and pr-title workflows, and the branch ruleset that
+│               declares which checks are required to merge.
+│
+├── adapters/   Outbound I/O against external systems: API clients, database
+│               connections, process execution. The root package defines the
+│               interfaces (Source, UnitManager, Validator, Runner); the
+│               subpackages implement them with go-git, the quadlet
+│               generator, systemctl and os/exec.
+├── ports/      Inbound external interfaces the application exposes to
+│               callers: HTTP REST API, gRPC API and the like. Does not
+│               exist yet; create it when the first such interface is added.
+│               The CLI is not a port, it lives in cmd/.
+├── app/        Application logic (layout, plan, sync, status, install).
+│               Depends on the adapters interfaces only.
+├── quadlet/    Quadlet naming rules shared by app and adapters.
+│
+├── cmd/        Cobra command implementations. Holds the root command and
+│               its subcommands; main.go only calls cmd.Execute().
+├── config/     Viper-based configuration loading and the application's
+│               default values
+├── internal/   Helpers not meant for import outside this module: xdg
+│               directory lookup, log redaction, test utilities.
+├── telemetry/  Telemetry package, holds logger.
+│
+├── deploy/     Deployment files (systemd service and timer units)
+├── hack/       Developer and CI tooling that is not part of the shipped
+│               binary. hooks/ holds the Conventional Commits validator
+│               shared by the local commit-msg hook and the pr-title
+│               workflow.
+└── docs/       Documentation for humans.
+    └── agents/ Documentation and similar written output produced by AI
+                agents and assistants: notes, memory, plans, research
+                reports, analyses.
+```
 
 This list is not exhaustive and will grow as the template does.
 

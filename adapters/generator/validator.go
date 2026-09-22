@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: TODO
 
-// Package generator implements ports.Validator with podman-system-generator.
+// Package generator implements adapters.Validator with podman-system-generator.
 package generator
 
 import (
@@ -15,7 +15,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/m4schini/robbe/ports"
+	"github.com/m4schini/robbe/adapters"
 	"github.com/m4schini/robbe/quadlet"
 )
 
@@ -27,22 +27,22 @@ var (
 	sourcePath = regexp.MustCompile(`^SourcePath=(.+)$`)
 )
 
-// Validator runs the quadlet generator through a ports.Runner.
+// Validator runs the quadlet generator through a adapters.Runner.
 type Validator struct {
 	bin    string
-	runner ports.Runner
+	runner adapters.Runner
 }
 
 // New returns a Validator using the generator at bin.
-func New(bin string, runner ports.Runner) *Validator {
+func New(bin string, runner adapters.Runner) *Validator {
 	return &Validator{bin: bin, runner: runner}
 }
 
-// Validate implements ports.Validator. On a failed run the units of the
+// Validate implements adapters.Validator. On a failed run the units of the
 // accepted files are still returned alongside the error. On a successful
 // run every unit file in dir must have produced exactly one unit; a file
 // without a unit or two files generating the same unit fail validation.
-func (v *Validator) Validate(ctx context.Context, dir string, user bool) (ports.Report, error) {
+func (v *Validator) Validate(ctx context.Context, dir string, user bool) (adapters.Report, error) {
 	args := []string{"-dryrun"}
 	if user {
 		args = append([]string{"-user"}, args...)
@@ -52,10 +52,10 @@ func (v *Validator) Validate(ctx context.Context, dir string, user bool) (ports.
 
 	units, dupes, err := parse(dir, stdout)
 	if err != nil {
-		return ports.Report{}, err
+		return adapters.Report{}, err
 	}
 
-	report := ports.Report{Units: units, Warnings: warnings(stderr)}
+	report := adapters.Report{Units: units, Warnings: warnings(stderr)}
 
 	if runErr != nil {
 		return report, fmt.Errorf("%w: %s (%w)", ErrValidation, problems(stderr, stdout), runErr)

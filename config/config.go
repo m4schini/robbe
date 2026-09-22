@@ -43,7 +43,7 @@ var ConfigFile string
 // ErrRepoURLMissing is returned by Load when no repository URL is configured.
 var ErrRepoURLMissing = errors.New("repo.url is not configured")
 
-// Auth mirrors ports.Auth so config stays free of application imports.
+// Auth mirrors adapters.Auth so config stays free of application imports.
 type Auth struct {
 	SSHKey         string `mapstructure:"ssh_key"`
 	SSHKeyPassword string `mapstructure:"ssh_key_password"`

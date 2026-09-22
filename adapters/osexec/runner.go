@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: TODO
 
-// Package osexec implements ports.Runner with os/exec.
+// Package osexec implements adapters.Runner with os/exec.
 package osexec
 
 import (
@@ -19,7 +19,7 @@ func New() *Runner {
 	return &Runner{}
 }
 
-// Run implements ports.Runner.
+// Run implements adapters.Runner.
 func (*Runner) Run(ctx context.Context, name string, env []string, args ...string) ([]byte, []byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = append(os.Environ(), env...)

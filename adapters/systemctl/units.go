@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: TODO
 
-// Package systemctl implements ports.UnitManager with the systemctl binary.
+// Package systemctl implements adapters.UnitManager with the systemctl binary.
 package systemctl
 
 import (
@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/m4schini/robbe/ports"
+	"github.com/m4schini/robbe/adapters"
 )
 
 const bin = "systemctl"
@@ -18,40 +18,40 @@ const bin = "systemctl"
 // one state per unit.
 var ErrUnexpectedOutput = errors.New("unexpected systemctl output")
 
-// Manager drives systemctl through a ports.Runner.
+// Manager drives systemctl through a adapters.Runner.
 type Manager struct {
-	runner ports.Runner
+	runner adapters.Runner
 	user   bool
 }
 
 // New returns a Manager. user selects `systemctl --user`.
-func New(runner ports.Runner, user bool) *Manager {
+func New(runner adapters.Runner, user bool) *Manager {
 	return &Manager{runner: runner, user: user}
 }
 
-// DaemonReload implements ports.UnitManager.
+// DaemonReload implements adapters.UnitManager.
 func (m *Manager) DaemonReload(ctx context.Context) error {
 	_, err := m.run(ctx, "daemon-reload")
 
 	return err
 }
 
-// Start implements ports.UnitManager.
+// Start implements adapters.UnitManager.
 func (m *Manager) Start(ctx context.Context, units ...string) error {
 	return m.units(ctx, "start", units)
 }
 
-// Restart implements ports.UnitManager.
+// Restart implements adapters.UnitManager.
 func (m *Manager) Restart(ctx context.Context, units ...string) error {
 	return m.units(ctx, "restart", units)
 }
 
-// Stop implements ports.UnitManager.
+// Stop implements adapters.UnitManager.
 func (m *Manager) Stop(ctx context.Context, units ...string) error {
 	return m.units(ctx, "stop", units)
 }
 
-// ActiveStates implements ports.UnitManager. `systemctl is-active` prints
+// ActiveStates implements adapters.UnitManager. `systemctl is-active` prints
 // one state per line and exits non-zero when any unit is not active, so the
 // exit code is ignored as long as the output has one line per unit.
 func (m *Manager) ActiveStates(ctx context.Context, units ...string) (map[string]string, error) {

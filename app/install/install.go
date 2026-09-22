@@ -17,8 +17,8 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/m4schini/robbe/adapters"
 	"github.com/m4schini/robbe/internal/xdg"
-	"github.com/m4schini/robbe/ports"
 	"go.uber.org/zap"
 )
 
@@ -51,9 +51,9 @@ type Options struct {
 	Interval time.Duration
 }
 
-// Installer performs Install and Uninstall through a ports.Runner.
+// Installer performs Install and Uninstall through a adapters.Runner.
 type Installer struct {
-	Runner ports.Runner
+	Runner adapters.Runner
 	Opts   Options
 	Log    *zap.Logger
 }

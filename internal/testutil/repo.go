@@ -46,7 +46,7 @@ func NewRepo(tb testing.TB) *Repo {
 	return &Repo{Dir: dir, repo: repo, t: tb}
 }
 
-// URL is the value to hand to ports.Source for this repository.
+// URL is the value to hand to adapters.Source for this repository.
 func (r *Repo) URL() string {
 	return r.Dir
 }

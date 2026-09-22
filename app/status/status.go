@@ -8,18 +8,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/m4schini/robbe/adapters"
 	"github.com/m4schini/robbe/app/layout"
 	"github.com/m4schini/robbe/app/lock"
 	"github.com/m4schini/robbe/app/marker"
 	"github.com/m4schini/robbe/app/plan"
-	"github.com/m4schini/robbe/ports"
 )
 
 // Options are the parts of the configuration status needs.
 type Options struct {
 	URL    string
 	Ref    string
-	Auth   ports.Auth
+	Auth   adapters.Auth
 	Host   string
 	Target string
 	// State is the directory holding the applied-commit marker.
@@ -46,7 +46,7 @@ type Status struct {
 // fetched commit against the target. It holds the sync lock throughout, as
 // src.Sync resets the shared clone. It returns lock.ErrLocked when another
 // run holds it.
-func Get(ctx context.Context, src ports.Source, opts Options) (Status, error) {
+func Get(ctx context.Context, src adapters.Source, opts Options) (Status, error) {
 	unlock, err := lock.Acquire(opts.Runtime)
 	if err != nil {
 		return Status{}, fmt.Errorf("lock: %w", err)

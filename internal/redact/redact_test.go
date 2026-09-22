@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: TODO
 
-package ports_test
+package redact_test
 
 import (
 	"testing"
 
-	"github.com/m4schini/robbe/ports"
+	"github.com/m4schini/robbe/internal/redact"
 )
 
-func TestRedactURL(t *testing.T) {
+func TestURL(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -28,8 +28,8 @@ func TestRedactURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := ports.RedactURL(tt.in); got != tt.want {
-				t.Errorf("RedactURL(%q) = %q, want %q", tt.in, got, tt.want)
+			if got := redact.URL(tt.in); got != tt.want {
+				t.Errorf("URL(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
 	}

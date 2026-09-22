@@ -31,7 +31,7 @@ type Result struct {
 	Err    error
 }
 
-// FakeRunner implements ports.Runner. Results are looked up by the exact
+// FakeRunner implements adapters.Runner. Results are looked up by the exact
 // Call.String() first, then by command name; unknown calls succeed with
 // empty output.
 type FakeRunner struct {
@@ -60,7 +60,7 @@ func (f *FakeRunner) Fail(line, stderr string) {
 	f.Script(line, Result{Stdout: "", Stderr: stderr, Err: ErrExit})
 }
 
-// Run implements ports.Runner.
+// Run implements adapters.Runner.
 func (f *FakeRunner) Run(_ context.Context, name string, env []string, args ...string) ([]byte, []byte, error) {
 	call := Call{Name: name, Env: env, Args: args}
 

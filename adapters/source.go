@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: TODO
 
-// Package ports defines the interfaces the application core depends on.
-package ports
+// Package adapters defines the interfaces through which the application
+// reaches external systems (git, systemd, the quadlet generator, os/exec).
+// Each subpackage implements one of them.
+package adapters
 
 import "context"
 

@@ -15,11 +15,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/m4schini/robbe/adapters"
 	"github.com/m4schini/robbe/app/layout"
 	"github.com/m4schini/robbe/app/lock"
 	"github.com/m4schini/robbe/app/marker"
 	"github.com/m4schini/robbe/app/plan"
-	"github.com/m4schini/robbe/ports"
+	"github.com/m4schini/robbe/internal/redact"
 	"github.com/m4schini/robbe/quadlet"
 	"go.uber.org/zap"
 )
@@ -56,7 +57,7 @@ func isUp(state string) bool {
 type Options struct {
 	URL    string
 	Ref    string
-	Auth   ports.Auth
+	Auth   adapters.Auth
 	Host   string
 	Target string
 	Cache  string
@@ -70,12 +71,12 @@ type Options struct {
 	AllowEmpty bool
 }
 
-// Syncer wires the ports together. Zero-value Log and Now are replaced by a
+// Syncer wires the adapters together. Zero-value Log and Now are replaced by a
 // no-op logger and time.Now.
 type Syncer struct {
-	Source    ports.Source
-	Validator ports.Validator
-	Units     ports.UnitManager
+	Source    adapters.Source
+	Validator adapters.Validator
+	Units     adapters.UnitManager
 	Opts      Options
 	Log       *zap.Logger
 	Now       func() time.Time
@@ -110,7 +111,7 @@ func (s *Syncer) Run(ctx context.Context, dryRun bool) (Result, error) {
 		return Result{}, fmt.Errorf("fetch: %w", err)
 	}
 
-	log.Info("fetched", zap.String("url", ports.RedactURL(s.Opts.URL)), zap.String("ref", s.Opts.Ref), zap.String("commit", co.Commit))
+	log.Info("fetched", zap.String("url", redact.URL(s.Opts.URL)), zap.String("ref", s.Opts.Ref), zap.String("commit", co.Commit))
 
 	applied, err := marker.Read(s.Opts.State)
 	if err != nil {

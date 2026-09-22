@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: TODO
 
-package ports
+package adapters
 
 import "context"
 

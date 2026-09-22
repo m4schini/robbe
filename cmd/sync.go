@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/m4schini/robbe/adapters"
 	"github.com/m4schini/robbe/adapters/generator"
 	"github.com/m4schini/robbe/adapters/gogit"
 	"github.com/m4schini/robbe/adapters/osexec"
@@ -15,7 +16,7 @@ import (
 	"github.com/m4schini/robbe/app/layout"
 	"github.com/m4schini/robbe/app/sync"
 	"github.com/m4schini/robbe/config"
-	"github.com/m4schini/robbe/ports"
+	"github.com/m4schini/robbe/internal/redact"
 	"github.com/m4schini/robbe/telemetry"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -46,7 +47,7 @@ var syncCmd = &cobra.Command{
 			Opts: sync.Options{
 				URL:        cfg.Repo.URL,
 				Ref:        cfg.Repo.Ref,
-				Auth:       ports.Auth(cfg.Repo.Auth),
+				Auth:       adapters.Auth(cfg.Repo.Auth),
 				Host:       cfg.Host,
 				Target:     cfg.Target,
 				Cache:      cfg.Cache,
@@ -101,7 +102,7 @@ func resolveRuntime(cfg config.Config, log *zap.Logger) string {
 
 // printHeader writes the repo/commit/host/target/state lines of the mockup.
 func printHeader(out io.Writer, cfg config.Config, res sync.Result) {
-	fmt.Fprintf(out, "repo    %s ref=%s\n", ports.RedactURL(cfg.Repo.URL), cfg.Repo.Ref)
+	fmt.Fprintf(out, "repo    %s ref=%s\n", redact.URL(cfg.Repo.URL), cfg.Repo.Ref)
 
 	applied := "none"
 	if res.Previous != "" {
