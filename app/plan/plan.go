@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -152,50 +153,100 @@ func (p Plan) Units() int {
 	return len(p.Start) + len(p.Restart) + len(p.Stop)
 }
 
-// String renders the plan for --dry-run output.
+// Style holds the prefixes Render puts in front of each kind of line and
+// the Reset that closes them. The zero value renders plain text; every
+// non-empty prefix is closed with Reset on the same line.
+type Style struct {
+	// Header styles the "files" and "units" section headers.
+	Header string
+	// Add, Change and Remove style the file lines by sign.
+	Add    string
+	Change string
+	Remove string
+	// Start, Restart and Stop style the unit lines by action.
+	Start   string
+	Restart string
+	Stop    string
+	// Muted styles the "(none)" fallbacks and the support-file note.
+	Muted string
+	// Reset closes every non-empty prefix.
+	Reset string
+}
+
+// String renders the plan as plain text for --dry-run output.
 func (p Plan) String() string {
-	var b strings.Builder
+	var (
+		b strings.Builder
+		s Style
+	)
 
-	b.WriteString("files\n")
-
-	if len(p.Add)+len(p.Change)+len(p.Remove) == 0 {
-		b.WriteString("  (none)\n")
-	}
-
-	writeFiles(&b, "+", p.Add)
-	writeFiles(&b, "~", p.Change)
-	writeFiles(&b, "-", p.Remove)
-
-	b.WriteString("\nunits\n")
-
-	if p.Units() == 0 {
-		b.WriteString("  (none)\n")
-	}
-
-	for _, u := range p.Stop {
-		fmt.Fprintf(&b, "  stop     %s\n", u)
-	}
-
-	for _, u := range p.Start {
-		fmt.Fprintf(&b, "  start    %s\n", u)
-	}
-
-	for _, u := range p.Restart {
-		fmt.Fprintf(&b, "  restart  %s\n", u)
-	}
+	p.Render(&b, s)
 
 	return b.String()
 }
 
-func writeFiles(b *strings.Builder, sign string, files []File) {
+// Render writes the plan to w, wrapping each line in s.
+func (p Plan) Render(w io.Writer, s Style) {
+	line(w, s.Header, "files", s.Reset)
+
+	if len(p.Add)+len(p.Change)+len(p.Remove) == 0 {
+		line(w, s.Muted, "  (none)", s.Reset)
+	}
+
+	writeFiles(w, s, "+", s.Add, p.Add)
+	writeFiles(w, s, "~", s.Change, p.Change)
+	writeFiles(w, s, "-", s.Remove, p.Remove)
+
+	fmt.Fprintln(w)
+	line(w, s.Header, "units", s.Reset)
+
+	if p.Units() == 0 {
+		line(w, s.Muted, "  (none)", s.Reset)
+	}
+
+	for _, u := range p.Stop {
+		line(w, s.Stop, "  stop     "+u, s.Reset)
+	}
+
+	for _, u := range p.Start {
+		line(w, s.Start, "  start    "+u, s.Reset)
+	}
+
+	for _, u := range p.Restart {
+		line(w, s.Restart, "  restart  "+u, s.Reset)
+	}
+}
+
+// writeFiles writes one line per file, the sign and path in prefix and,
+// for a support file, the note in s.Muted on the same line.
+func writeFiles(w io.Writer, s Style, sign, prefix string, files []File) {
 	for _, f := range files {
-		note := ""
+		span(w, prefix, "  "+sign+" "+f.Rel, s.Reset)
+
 		if f.Unit == "" {
-			note = "          (support file -> restart workloads)"
+			span(w, s.Muted, "          (support file -> restart workloads)", s.Reset)
 		}
 
-		fmt.Fprintf(b, "  %s %s%s\n", sign, f.Rel, note)
+		fmt.Fprintln(w)
 	}
+}
+
+// line writes one span followed by a newline.
+func line(w io.Writer, prefix, text, reset string) {
+	span(w, prefix, text, reset)
+	fmt.Fprintln(w)
+}
+
+// span writes prefix+text+reset without a newline. An empty prefix writes
+// only text, so the zero Style emits no stray resets.
+func span(w io.Writer, prefix, text, reset string) {
+	if prefix == "" {
+		fmt.Fprint(w, text)
+
+		return
+	}
+
+	fmt.Fprint(w, prefix+text+reset)
 }
 
 func hasSupportFile(files []File) bool {

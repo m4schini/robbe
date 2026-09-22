@@ -45,6 +45,13 @@ Additionally, `DEVELOPMENT=1` (or any value `strconv.ParseBool` accepts as
 true) switches the logger from production to development output. It is not a
 `ROBBE_*` variable and is not part of the `Config` struct.
 
+`NO_COLOR`, set to any value including the empty string (see
+<https://no-color.org>), disables the colored files/units plan of `robbe sync`.
+`TERM=dumb` and a stdout that is not a terminal (a pipe, the systemd journal)
+have the same effect. The persistent `--color=always` or `--color=never` flag
+overrides all of them. Like `DEVELOPMENT`, `NO_COLOR` is not a `ROBBE_*`
+variable and is not part of the `Config` struct.
+
 ## Keys
 
 | Key | Env var | Default | Description |

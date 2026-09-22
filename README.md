@@ -52,6 +52,8 @@ search.
 Exit status is 0 on success or when nothing changed, 1 on any error.
 `sync` skips all work when the fetched commit equals the one recorded in
 `<state>/applied` and the target directory still exists.
+On a terminal the files/units plan is printed in color; `--color=never` or
+`--color=always` overrides the detection and `NO_COLOR` is respected.
 
 ## How a sync works
 

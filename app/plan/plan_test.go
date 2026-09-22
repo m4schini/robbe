@@ -638,3 +638,85 @@ func TestDiff_StaleCommitMarkerRemoved(t *testing.T) {
 		t.Errorf("Remove = %+v, want %+v", p.Remove, want)
 	}
 }
+
+// styledPlan has one entry per list, including a support file.
+func styledPlan() Plan {
+	return Plan{
+		Add:        []File{{Rel: "hosts/alpha/nginx.container", Unit: "nginx.service"}},
+		Change:     []File{{Rel: "common/proxy.network", Unit: "proxy-network.service"}, {Rel: "nginx.env", Unit: ""}},
+		Remove:     []File{{Rel: "db.container", Unit: "db.service"}},
+		Start:      []string{"nginx.service"},
+		Restart:    []string{"proxy-network.service"},
+		Stop:       []string{"db.service"},
+		RestartAll: true,
+	}
+}
+
+func TestPlan_Render_Styled(t *testing.T) {
+	t.Parallel()
+
+	style := Style{
+		Header:  "<h>",
+		Add:     "<a>",
+		Change:  "<c>",
+		Remove:  "<r>",
+		Start:   "<s>",
+		Restart: "<rs>",
+		Stop:    "<st>",
+		Muted:   "<m>",
+		Reset:   "</>",
+	}
+
+	want := "<h>files</>\n" +
+		"<a>  + hosts/alpha/nginx.container</>\n" +
+		"<c>  ~ common/proxy.network</>\n" +
+		"<c>  ~ nginx.env</><m>          (support file -> restart workloads)</>\n" +
+		"<r>  - db.container</>\n" +
+		"\n" +
+		"<h>units</>\n" +
+		"<st>  stop     db.service</>\n" +
+		"<s>  start    nginx.service</>\n" +
+		"<rs>  restart  proxy-network.service</>\n"
+
+	var b strings.Builder
+
+	styledPlan().Render(&b, style)
+
+	if got := b.String(); got != want {
+		t.Errorf("Render() =\n%s\nwant:\n%s", got, want)
+	}
+
+	b.Reset()
+
+	var zero Plan
+
+	zero.Render(&b, style)
+
+	wantEmpty := "<h>files</>\n<m>  (none)</>\n\n<h>units</>\n<m>  (none)</>\n"
+	if got := b.String(); got != wantEmpty {
+		t.Errorf("Render(zero) =\n%s\nwant:\n%s", got, wantEmpty)
+	}
+}
+
+func TestPlan_Render_ZeroStyleEqualsString(t *testing.T) {
+	t.Parallel()
+
+	var zero Plan
+
+	for name, p := range map[string]Plan{"populated": styledPlan(), "zero": zero} {
+		var (
+			b     strings.Builder
+			style Style
+		)
+
+		p.Render(&b, style)
+
+		if got, want := b.String(), p.String(); got != want {
+			t.Errorf("%s: Render(zero Style) =\n%s\nString() =\n%s", name, got, want)
+		}
+
+		if strings.Contains(b.String(), "\x1b") {
+			t.Errorf("%s: zero Style output contains escape:\n%q", name, b.String())
+		}
+	}
+}

@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/m4schini/robbe/app/plan"
 	"github.com/m4schini/robbe/app/sync"
 	"github.com/m4schini/robbe/config"
+	"github.com/m4schini/robbe/internal/ansi"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -73,5 +75,57 @@ func TestPrintHeader_RedactsPassword(t *testing.T) {
 
 	if !strings.Contains(out.String(), "repo    https://user:xxxxx@example.com/x.git ref=main") {
 		t.Errorf("header missing redacted url:\n%s", out.String())
+	}
+}
+
+func TestPlanStyle(t *testing.T) {
+	t.Parallel()
+
+	var zero plan.Style
+
+	if got := planStyle(false); got != zero {
+		t.Errorf("planStyle(false) = %+v, want zero", got)
+	}
+
+	got := planStyle(true)
+	for name, v := range map[string]string{
+		"Header": got.Header, "Add": got.Add, "Change": got.Change, "Remove": got.Remove,
+		"Start": got.Start, "Restart": got.Restart, "Stop": got.Stop, "Muted": got.Muted, "Reset": got.Reset,
+	} {
+		if v == "" {
+			t.Errorf("planStyle(true).%s is empty", name)
+		}
+	}
+
+	if got.Reset != ansi.Reset {
+		t.Errorf("planStyle(true).Reset = %q, want %q", got.Reset, ansi.Reset)
+	}
+}
+
+//nolint:paralleltest // mutates the package-level rootCmd
+func TestRootColorFlag_Invalid(t *testing.T) {
+	var out, errOut bytes.Buffer
+
+	rootCmd.SetArgs([]string{"--color", "blue", "version"})
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&errOut)
+
+	t.Cleanup(func() {
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+
+		colorMode = ansi.ModeAuto
+	})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatalf("Execute() error = nil, want invalid --color error (stdout %q)", out.String())
+	}
+
+	for _, want := range []string{"--color", "auto"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Execute() error = %q, want it to contain %q", err.Error(), want)
+		}
 	}
 }

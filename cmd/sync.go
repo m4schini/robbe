@@ -5,6 +5,7 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,8 +15,10 @@ import (
 	"github.com/m4schini/robbe/adapters/osexec"
 	"github.com/m4schini/robbe/adapters/systemctl"
 	"github.com/m4schini/robbe/app/layout"
+	"github.com/m4schini/robbe/app/plan"
 	"github.com/m4schini/robbe/app/sync"
 	"github.com/m4schini/robbe/config"
+	"github.com/m4schini/robbe/internal/ansi"
 	"github.com/m4schini/robbe/internal/redact"
 	"github.com/m4schini/robbe/telemetry"
 	"github.com/spf13/cobra"
@@ -69,21 +72,57 @@ var syncCmd = &cobra.Command{
 			return fmt.Errorf("sync: %w", err)
 		}
 
+		style := planStyle(colorEnabled(log))
+
 		switch {
 		case res.UpToDate:
 			fmt.Fprintln(out, "up to date")
 		case syncDryRun:
 			fmt.Fprintln(out)
-			fmt.Fprint(out, res.Plan.String())
+			res.Plan.Render(out, style)
 			fmt.Fprintln(out, "dry run: no changes made")
 		default:
 			fmt.Fprintln(out)
-			fmt.Fprint(out, res.Plan.String())
+			res.Plan.Render(out, style)
 			fmt.Fprintf(out, "applied %s\n", short(res.Commit))
 		}
 
 		return nil
 	},
+}
+
+// colorEnabled decides from the --color flag and os.Stdout (not the
+// command's writer, so tests with a buffer see plain output) whether the
+// plan is printed in color. The mode was validated by the root command, so
+// an error is unexpected; it is logged and treated as disabled.
+func colorEnabled(log *zap.Logger) bool {
+	enabled, err := ansi.Enabled(colorMode, os.Stdout)
+	if err != nil {
+		log.Warn("color detection failed, printing plain", zap.Error(err))
+
+		return false
+	}
+
+	return enabled
+}
+
+// planStyle maps the color decision onto the plan renderer.
+func planStyle(enabled bool) plan.Style {
+	if !enabled {
+		return plan.Style{}
+	}
+
+	return plan.Style{
+		Header:  ansi.Bold,
+		Add:     ansi.Green,
+		Change:  ansi.Yellow,
+		Remove:  ansi.Red,
+		Start:   ansi.Green,
+		Restart: ansi.Yellow,
+		Stop:    ansi.Red,
+		Muted:   ansi.Dim,
+		Reset:   ansi.Reset,
+	}
 }
 
 // resolveRuntime returns the directory for the lock file: cfg.Runtime when
